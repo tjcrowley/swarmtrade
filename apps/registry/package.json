@@ -2,7 +2,7 @@
   "name": "@a2a/registry",
   "version": "0.1.0",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
     "start": "node apps/registry/index.js",
     "dev": "ts-node apps/registry/index.ts"
   },
