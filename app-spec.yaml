@@ -23,5 +23,14 @@ services:
     scope: BUILD_TIME
     value: "false"
   routes:
-  - path: /
+  - path: /api
     preserve_path_prefix: false
+- name: landing-page
+  static_site:
+    github:
+      repo: tjcrowley/a2a-hub
+      branch: main
+    build_command: ""
+    output_dir: apps/landing
+  routes:
+  - path: /
