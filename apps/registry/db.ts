@@ -5,10 +5,10 @@ const connectionString = process.env.DATABASE_URL || 'postgresql://a2a_admin:sec
 const config = parse(connectionString);
 
 const pool = new Pool({
-  host: config.host,
-  user: config.user,
-  password: config.password,
-  database: config.database,
+  host: config.host || undefined,
+  user: config.user || undefined,
+  password: config.password || undefined,
+  database: config.database || undefined,
   port: Number(config.port) || 5433,
   ssl: {
     rejectUnauthorized: false
