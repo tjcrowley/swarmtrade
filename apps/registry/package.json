@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "fastify": "^4.0.0",
+    "@fastify/swagger": "^8.0.0",
+    "@fastify/swagger-ui": "^4.0.0",
     "pg": "^8.11.0",
     "pg-connection-string": "^2.7.0",
     "@a2a/types": "file:../../packages/types"
