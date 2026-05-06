@@ -1,8 +1,18 @@
 {
   "name": "@a2a/registry",
   "version": "0.1.0",
+  "scripts": {
+    "dev": "ts-node index.ts"
+  },
   "dependencies": {
     "fastify": "^4.0.0",
-    "@a2a/types": "workspace:*"
+    "pg": "^8.11.0",
+    "@a2a/types": "file:../../packages/types"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
   }
 }
