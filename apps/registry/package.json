@@ -2,7 +2,9 @@
   "name": "@a2a/registry",
   "version": "0.1.0",
   "scripts": {
-    "dev": "ts-node index.ts"
+    "build": "tsc",
+    "start": "node apps/registry/index.js",
+    "dev": "ts-node apps/registry/index.ts"
   },
   "dependencies": {
     "fastify": "^4.0.0",
