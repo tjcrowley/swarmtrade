@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  postgres:
+    image: ankane/pgvector
+    environment:
+      POSTGRES_USER: a2a_admin
+      POSTGRES_PASSWORD: secure_a2a_password
+      POSTGRES_DB: a2a_hub
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
