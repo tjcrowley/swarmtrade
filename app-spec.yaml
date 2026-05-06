@@ -1,6 +1,15 @@
 name: swarmtrade-registry
 region: sfo
 services:
+- name: landing-page
+  static_site:
+    github:
+      repo: tjcrowley/a2a-hub
+      branch: main
+    build_command: ""
+    output_dir: public
+  routes:
+  - path: /
 - name: registry-api
   github:
     repo: tjcrowley/a2a-hub
@@ -24,13 +33,4 @@ services:
     value: "false"
   routes:
   - path: /api
-    preserve_path_prefix: false
-- name: landing-page
-  static_site:
-    github:
-      repo: tjcrowley/a2a-hub
-      branch: main
-    build_command: ""
-    output_dir: public
-  routes:
-  - path: /
+    preserve_path_prefix: true
