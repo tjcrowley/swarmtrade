@@ -1,1 +1,1 @@
-web: node apps/registry/index.js
+web: npm start

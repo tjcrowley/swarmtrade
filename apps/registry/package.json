@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node apps/registry/index.js",
+    "start": "ts-node apps/registry/index.ts",
     "dev": "ts-node apps/registry/index.ts"
   },
   "dependencies": {
