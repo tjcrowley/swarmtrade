@@ -1,9 +1,15 @@
 import { Pool } from 'pg';
+import { parse } from 'pg-connection-string';
 
-// DigitalOcean connections require SSL. 
-// We use 'rejectUnauthorized: false' to skip CA validation for the managed instance.
+const connectionString = process.env.DATABASE_URL || 'postgresql://a2a_admin:secure_a2a_password@localhost:5433/a2a_hub';
+const config = parse(connectionString);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  host: config.host,
+  user: config.user,
+  password: config.password,
+  database: config.database,
+  port: Number(config.port) || 5433,
   ssl: {
     rejectUnauthorized: false
   }
