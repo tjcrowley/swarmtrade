@@ -98,7 +98,9 @@ async function migrate() {
           buyer_id TEXT NOT NULL,
           seller_id TEXT NOT NULL,
           asset_id TEXT NOT NULL,
-          state TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'INIT',
+          quote JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
@@ -115,10 +117,8 @@ async function migrate() {
 // Routes
 // ---------------------------------------------------------------------------
 
-// Root redirect to landing page
-server.get('/', async (_request, reply) => {
-  return reply.redirect(302, 'https://swarmtrade.store');
-});
+// Root redirect removed (handled by landing page component in app-spec)
+
 
 // Health check
 server.get(
