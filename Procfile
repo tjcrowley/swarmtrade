@@ -1,1 +1,1 @@
-web: node apps/registry/index.js
+web: npx ts-node apps/registry/index.ts
