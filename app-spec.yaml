@@ -13,14 +13,11 @@ services:
     scope: RUN_AND_BUILD_TIME
     value: postgresql://doadmin:AVNS_anIiZYbPe_E1Lzym9FB@swarmtrade-db-do-user-3392016-0.f.db.ondigitalocean.com:25060/defaultdb?sslmode=require
   - key: CI
-    scope: BUILD_TIME
+    scope: RUN_AND_BUILD_TIME
     value: "true"
-  - key: PNPM_CONFIG_AUTO_INSTALL_PEERS
-    scope: BUILD_TIME
+  - key: PNPM_CONFIG_CI
+    scope: RUN_AND_BUILD_TIME
     value: "true"
-  - key: PNPM_CONFIG_CONFIRM_MODULES_PURGE
-    scope: BUILD_TIME
-    value: "false"
   routes:
   - path: /
     preserve_path_prefix: false
