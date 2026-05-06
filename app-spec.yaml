@@ -6,6 +6,7 @@ services:
     repo: tjcrowley/a2a-hub
     branch: main
     deploy_on_push: true
+  dockerfile_path: Dockerfile
   instance_size_slug: basic-xs
   instance_count: 1
   envs:
