@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "dev": "ts-node index.ts",
-    "preinstall": "npm config set confirmModulesPurge false && npm config set update-notifier false",
+    "preinstall": "npm config set confirmModulesPurge false && npm config set update-notifier false"
   },
   "dependencies": {
     "fastify": "^4.0.0",
