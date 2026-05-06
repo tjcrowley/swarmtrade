@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "ts-node apps/registry/index.ts",
-    "dev": "ts-node apps/registry/index.ts"
+    "start": "node dist/index.js",
+    "dev": "ts-node index.ts"
   },
   "dependencies": {
     "fastify": "^4.0.0",
