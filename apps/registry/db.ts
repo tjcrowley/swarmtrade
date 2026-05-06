@@ -35,8 +35,12 @@ function buildSslConfig(): PoolConfig['ssl'] {
 
   // If the connection string signals SSL (DigitalOcean default), enable SSL
   // but rely on the system/Node CA bundle rather than disabling verification.
+  // We use libpq-compat and verify-full to handle self-signed DO certs strictly.
   if (connectionString.includes('sslmode=require')) {
-    return { rejectUnauthorized: true };
+    return { 
+      rejectUnauthorized: true,
+      sslmode: 'verify-full'
+    };
   }
 
   // Local development — no SSL
