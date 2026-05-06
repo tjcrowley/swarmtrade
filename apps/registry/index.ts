@@ -122,6 +122,8 @@ server.get('/', async (_request, reply) => {
 
 // Health check
 server.get(
+  '/health',
+  {
     schema: {
       tags: ['health'],
       summary: 'Health check',
