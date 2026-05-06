@@ -1,6 +1,10 @@
 {
   "name": "@a2a/registry",
   "version": "0.1.0",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "10.33.4"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",

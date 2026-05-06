@@ -12,6 +12,9 @@ services:
   - key: DATABASE_URL
     scope: RUN_AND_BUILD_TIME
     value: postgresql://doadmin:AVNS_anIiZYbPe_E1Lzym9FB@swarmtrade-db-do-user-3392016-0.f.db.ondigitalocean.com:25060/defaultdb?sslmode=require
+  - key: CI
+    scope: BUILD_TIME
+    value: "true"
   routes:
   - path: /
     preserve_path_prefix: false
