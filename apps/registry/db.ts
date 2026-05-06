@@ -38,8 +38,7 @@ function buildSslConfig(): PoolConfig['ssl'] {
   // We use libpq-compat and verify-full to handle self-signed DO certs strictly.
   if (connectionString.includes('sslmode=require')) {
     return { 
-      rejectUnauthorized: true,
-      sslmode: 'verify-full'
+      rejectUnauthorized: true
     };
   }
 
