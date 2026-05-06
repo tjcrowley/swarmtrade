@@ -119,8 +119,9 @@ async function migrate() {
 server.get('/', async (_request, reply) => {
   return reply.redirect(302, 'https://swarmtrade.store');
 });
-  '/health',
-  {
+
+// Health check
+server.get(
     schema: {
       tags: ['health'],
       summary: 'Health check',
