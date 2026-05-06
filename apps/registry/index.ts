@@ -115,8 +115,10 @@ async function migrate() {
 // Routes
 // ---------------------------------------------------------------------------
 
-// Health check
-server.get(
+// Root redirect to landing page
+server.get('/', async (_request, reply) => {
+  return reply.redirect(302, 'https://swarmtrade.store');
+});
   '/health',
   {
     schema: {
