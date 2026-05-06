@@ -30,7 +30,7 @@ services:
     github:
       repo: tjcrowley/a2a-hub
       branch: main
-    build_command: cp -r apps/landing/* .
-    output_dir: .
+    build_command: ""
+    output_dir: public
   routes:
   - path: /

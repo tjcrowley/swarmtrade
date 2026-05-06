@@ -15,3 +15,14 @@ CREATE TABLE IF NOT EXISTS asset_announcements (
 );
 
 CREATE INDEX IF NOT EXISTS idx_asset_embedding ON asset_announcements USING ivfflat (embedding vector_cosine_ops);
+
+CREATE TABLE IF NOT EXISTS handshakes (
+    handshake_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id TEXT NOT NULL,
+    seller_id TEXT NOT NULL,
+    asset_id TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'INIT',
+    quote JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
