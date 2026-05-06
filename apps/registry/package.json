@@ -1,0 +1,8 @@
+{
+  "name": "@a2a/registry",
+  "version": "0.1.0",
+  "dependencies": {
+    "fastify": "^4.0.0",
+    "@a2a/types": "workspace:*"
+  }
+}

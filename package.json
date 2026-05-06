@@ -1,0 +1,13 @@
+{
+  "name": "a2a-hub",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "turbo": "^2.0.0"
+  }
+}
