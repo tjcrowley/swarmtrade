@@ -9,7 +9,7 @@ COPY apps/registry/package.json ./apps/registry/
 COPY packages/types/package.json ./packages/types/
 RUN pnpm install --frozen-lockfile --no-frozen-lockfile --ignore-scripts
 COPY . .
-RUN pnpm --filter @a2a/registry build
+RUN pnpm --filter @a2a/registry build && cp -r apps/registry/public apps/registry/dist/public
 EXPOSE 8080
 ENV PORT=8080
 CMD ["node", "apps/registry/dist/index.js"]
