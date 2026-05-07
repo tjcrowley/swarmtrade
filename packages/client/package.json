@@ -1,0 +1,8 @@
+{
+  "name": "@a2a/client",
+  "version": "0.1.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@a2a/types": "workspace:*"
+  }
+}
