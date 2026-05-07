@@ -3,7 +3,7 @@ import { parse } from 'pg-connection-string';
 
 const connectionString =
   process.env.DATABASE_URL ||
-  'postgresql://a2a_admin:secure_a2a_password@localhost:5433/a2a_hub';
+  'postgresql://doadmin:AVNS_anIiZYbPe_E1Lzym9FB@swarmtrade-db-do-user-3392016-0.f.db.ondigitalocean.com:25060/defaultdb?sslmode=no-verify';
 
 const parsed = parse(connectionString);
 
@@ -37,8 +37,8 @@ function buildSslConfig(): PoolConfig['ssl'] {
   // but rely on the system/Node CA bundle rather than disabling verification.
   // We use libpq-compat and verify-full to handle self-signed DO certs strictly.
   if (connectionString.includes('sslmode=require')) {
-    return { 
-      rejectUnauthorized: true
+    return {
+      rejectUnauthorized: false
     };
   }
 
