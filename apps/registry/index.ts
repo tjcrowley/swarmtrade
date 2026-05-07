@@ -3,8 +3,10 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { AssetManifest } from '@a2a/types';
 import pool, { verifyConnection } from './db';
+import { PostgresNegotiationRepository } from './negotiation-repo';
 
 const server = fastify({ logger: true });
+const repo = new PostgresNegotiationRepository(pool);
 
 // ---------------------------------------------------------------------------
 // OpenAPI / Swagger
@@ -186,6 +188,33 @@ server.post<{ Body: AssetManifest }>(
     }
   }
 );
+
+// Middleware for agent authentication (Basic agent_id header check)
+server.addHook('preHandler', async (request, reply) => {
+  const agentId = request.headers['x-agent-id'];
+  if (!agentId) {
+    return reply.status(401).send({ error: 'Unauthorized: Missing x-agent-id header' });
+  }
+});
+
+// Handshake endpoints
+server.post('/registry/handshake', async (request, reply) => {
+  const params = request.body as any; // Validation logic TBD
+  return await repo.create(params);
+});
+
+server.post('/registry/negotiation/:id/transition', async (request, reply) => {
+  const { id } = request.params as any;
+  const { fromVersion, nextState, quote } = request.body as any;
+  try {
+    return await repo.transition(id, fromVersion, nextState, quote);
+  } catch (err: any) {
+    if (err.message === 'StaleVersionError') {
+      return reply.status(409).send({ error: 'Conflict: Negotiation state has changed.' });
+    }
+    throw err;
+  }
+});
 
 // Search / list assets
 server.get(
