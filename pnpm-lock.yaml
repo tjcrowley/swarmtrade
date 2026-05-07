@@ -20,6 +20,9 @@ importers:
       '@a2a/types':
         specifier: file:../../packages/types
         version: link:../../packages/types
+      '@fastify/static':
+        specifier: ^7.0.0
+        version: 7.0.4
       '@fastify/swagger':
         specifier: ^8.0.0
         version: 8.15.0
@@ -48,6 +51,12 @@ importers:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+
+  packages/client:
+    dependencies:
+      '@a2a/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/types: {}
 

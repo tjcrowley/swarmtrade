@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwarmTrade Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: '#3b82f6' } } }
+    };
+  </script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+<!-- Header -->
+<div class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <span class="text-2xl font-bold text-blue-400">SwarmTrade</span>
+    <span class="text-slate-400 text-sm">Admin Dashboard</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <input id="adminKey" type="password" placeholder="Admin API key"
+      class="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 w-52 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <button onclick="loadAll()"
+      class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-1.5 rounded transition">
+      Load
+    </button>
+  </div>
+</div>
+
+<div class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+
+  <!-- Stats -->
+  <div>
+    <h2 class="text-lg font-semibold mb-4 text-slate-200">Platform Overview</h2>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="statsGrid">
+      <div class="stat-card">—</div>
+    </div>
+  </div>
+
+  <!-- Fee Config -->
+  <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+    <h2 class="text-lg font-semibold mb-1 text-slate-200">Fee Configuration</h2>
+    <p class="text-slate-400 text-sm mb-5">Changes apply to new settlements immediately. Existing settled trades retain their snapshot fee.</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Platform Fee (basis points)</label>
+        <input id="feeBps" type="number" min="0" max="10000" placeholder="150"
+          class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <p class="text-slate-500 text-xs mt-1">100 bps = 1% &nbsp;·&nbsp; 150 bps = 1.5%</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Minimum Fee (leave blank = none)</label>
+        <input id="minFee" type="number" min="0" placeholder="e.g. 0.50"
+          class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Maximum Fee (leave blank = no cap)</label>
+        <input id="maxFee" type="number" min="0" placeholder="e.g. 500"
+          class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+    </div>
+    <div class="mt-5 flex items-center gap-3">
+      <button onclick="saveFeeConfig()"
+        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded transition">
+        Save Fee Config
+      </button>
+      <span id="feeStatus" class="text-sm text-slate-400"></span>
+    </div>
+  </div>
+
+  <!-- Recent Trades -->
+  <div>
+    <h2 class="text-lg font-semibold mb-4 text-slate-200">Recent Trades</h2>
+    <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-slate-750 border-b border-slate-700 text-slate-400 text-xs uppercase">
+            <th class="px-4 py-3 text-left">ID</th>
+            <th class="px-4 py-3 text-left">Buyer</th>
+            <th class="px-4 py-3 text-left">Seller</th>
+            <th class="px-4 py-3 text-left">Status</th>
+            <th class="px-4 py-3 text-right">Value</th>
+            <th class="px-4 py-3 text-right">Fee</th>
+            <th class="px-4 py-3 text-left">Updated</th>
+          </tr>
+        </thead>
+        <tbody id="tradesBody">
+          <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">Load data using the key above</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .stat-card {
+    @apply bg-slate-800 rounded-xl border border-slate-700 px-4 py-5 text-center;
+  }
+</style>
+
+<script>
+  const API = window.location.origin;
+
+  function adminKey() {
+    return document.getElementById('adminKey').value || localStorage.getItem('adminKey') || '';
+  }
+
+  function headers() {
+    const key = adminKey();
+    if (key) localStorage.setItem('adminKey', key);
+    return { 'Content-Type': 'application/json', 'x-admin-key': key };
+  }
+
+  // Restore saved key
+  document.getElementById('adminKey').value = localStorage.getItem('adminKey') || '';
+
+  async function loadStats() {
+    const res = await fetch(`${API}/admin/api/stats`, { headers: headers() });
+    if (!res.ok) { document.getElementById('statsGrid').innerHTML = '<div class="col-span-5 text-red-400 text-sm">Auth failed — check your admin key.</div>'; return; }
+    const d = await res.json();
+    const grid = document.getElementById('statsGrid');
+    grid.innerHTML = [
+      { label: 'Total Trades',       value: d.total_trades.toLocaleString() },
+      { label: 'Active',             value: d.active_negotiations.toLocaleString() },
+      { label: 'Settled',            value: d.settled_trades.toLocaleString() },
+      { label: 'Total Volume',       value: fmt(d.total_volume) },
+      { label: 'Fees Collected',     value: fmt(d.total_fees_collected), highlight: true },
+    ].map(s => `
+      <div class="bg-slate-800 rounded-xl border border-slate-700 px-4 py-5 text-center">
+        <div class="text-xs font-semibold uppercase text-slate-400 mb-1">${s.label}</div>
+        <div class="text-2xl font-bold ${s.highlight ? 'text-green-400' : 'text-white'}">${s.value}</div>
+      </div>
+    `).join('');
+  }
+
+  async function loadFeeConfig() {
+    const res = await fetch(`${API}/admin/api/fee-config`, { headers: headers() });
+    if (!res.ok) return;
+    const d = await res.json();
+    document.getElementById('feeBps').value = d.fee_bps ?? '';
+    document.getElementById('minFee').value = d.min_fee ?? '';
+    document.getElementById('maxFee').value = d.max_fee ?? '';
+  }
+
+  async function saveFeeConfig() {
+    const fee_bps = parseInt(document.getElementById('feeBps').value);
+    const minVal = document.getElementById('minFee').value;
+    const maxVal = document.getElementById('maxFee').value;
+    const body = {
+      fee_bps,
+      min_fee: minVal !== '' ? parseFloat(minVal) : null,
+      max_fee: maxVal !== '' ? parseFloat(maxVal) : null,
+    };
+    const status = document.getElementById('feeStatus');
+    status.textContent = 'Saving…';
+    status.className = 'text-sm text-slate-400';
+    const res = await fetch(`${API}/admin/api/fee-config`, {
+      method: 'PUT', headers: headers(), body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      status.textContent = `✓ Saved at ${new Date().toLocaleTimeString()}`;
+      status.className = 'text-sm text-green-400';
+    } else {
+      status.textContent = '✗ Save failed — check your key or values.';
+      status.className = 'text-sm text-red-400';
+    }
+  }
+
+  async function loadTrades() {
+    const res = await fetch(`${API}/admin/api/trades?limit=25`, { headers: headers() });
+    if (!res.ok) return;
+    const trades = await res.json();
+    const tbody = document.getElementById('tradesBody');
+    if (!trades.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No trades yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = trades.map(t => `
+      <tr class="border-b border-slate-700 hover:bg-slate-750">
+        <td class="px-4 py-3 font-mono text-xs text-slate-400">${t.id.slice(0,8)}…</td>
+        <td class="px-4 py-3 font-mono text-xs">${trunc(t.buyer_id)}</td>
+        <td class="px-4 py-3 font-mono text-xs">${trunc(t.seller_id)}</td>
+        <td class="px-4 py-3">${badge(t.status)}</td>
+        <td class="px-4 py-3 text-right">${t.trade_value != null ? fmt(t.trade_value) + ' ' + (t.currency || '') : '—'}</td>
+        <td class="px-4 py-3 text-right ${t.fee_amount ? 'text-green-400' : 'text-slate-500'}">${t.fee_amount != null ? fmt(t.fee_amount) : '—'}</td>
+        <td class="px-4 py-3 text-slate-400 text-xs">${t.updated_at ? new Date(t.updated_at).toLocaleString() : '—'}</td>
+      </tr>
+    `).join('');
+  }
+
+  function fmt(n) {
+    return n == null ? '—' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function trunc(s) {
+    return s && s.length > 12 ? s.slice(0, 12) + '…' : (s || '—');
+  }
+  function badge(status) {
+    const colors = {
+      proposed: 'bg-slate-600 text-slate-200',
+      countered: 'bg-yellow-700 text-yellow-100',
+      accepted:  'bg-blue-700 text-blue-100',
+      escrowed:  'bg-purple-700 text-purple-100',
+      settled:   'bg-green-700 text-green-100',
+      rejected:  'bg-red-800 text-red-100',
+      expired:   'bg-slate-700 text-slate-300',
+      cancelled: 'bg-slate-700 text-slate-300',
+      disputed:  'bg-orange-700 text-orange-100',
+    };
+    const cls = colors[status] || 'bg-slate-600 text-slate-200';
+    return `<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold ${cls}">${status}</span>`;
+  }
+
+  async function loadAll() {
+    await Promise.all([loadStats(), loadFeeConfig(), loadTrades()]);
+  }
+
+  // Auto-load if key is already stored
+  if (document.getElementById('adminKey').value) loadAll();
+</script>
+</body>
+</html>
