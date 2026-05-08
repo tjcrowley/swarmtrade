@@ -10,6 +10,7 @@ import { AssetManifest } from '@a2a/types';
 import { PostgresNegotiationRepository } from './negotiation-repo';
 import { FeeConfigRepository } from './fee-config';
 import { EscrowRegistry, ConfirmationEscrowAdapter } from './escrow';
+import { recordResponse } from './alert';
 
 export interface AppDeps {
   pool: Pool;
@@ -111,6 +112,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // -------------------------------------------------------------------------
   // Auth hooks
   // -------------------------------------------------------------------------
+  // Track 5xx rate for Slack alerting (no-op when SLACK_WEBHOOK_URL is unset)
+  server.addHook('onSend', async (request, reply) => {
+    recordResponse(reply.statusCode);
+  });
+
   server.addHook('preHandler', async (request, reply) => {
     const url = request.url;
     if (url.startsWith('/admin') || url.startsWith('/health') || url.startsWith('/docs') || url.startsWith('/openapi')) return;

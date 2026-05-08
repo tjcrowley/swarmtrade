@@ -22,6 +22,9 @@ services:
   - key: PNPM_CONFIG_CONFIRM_MODULES_PURGE
     scope: BUILD_TIME
     value: "false"
+  - key: SLACK_WEBHOOK_URL
+    scope: RUN_TIME
+    value: ""
   routes:
   - path: /api
   - path: /admin
