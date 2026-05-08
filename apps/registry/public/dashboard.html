@@ -72,6 +72,28 @@
     </div>
   </div>
 
+  <!-- Disputed Trades (Priority) -->
+  <div>
+    <h2 class="text-lg font-semibold mb-4 text-orange-400">⚠️ Disputed Trades</h2>
+    <div class="bg-slate-800 rounded-xl border border-orange-700/50 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-slate-750 border-b border-slate-700 text-slate-400 text-xs uppercase">
+            <th class="px-4 py-3 text-left">ID</th>
+            <th class="px-4 py-3 text-left">Buyer</th>
+            <th class="px-4 py-3 text-left">Seller</th>
+            <th class="px-4 py-3 text-right">Value</th>
+            <th class="px-4 py-3 text-left">Disputed At</th>
+            <th class="px-4 py-3 text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="disputesBody">
+          <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No disputed trades</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Recent Trades -->
   <div>
     <h2 class="text-lg font-semibold mb-4 text-slate-200">Recent Trades</h2>
@@ -92,6 +114,32 @@
           <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">Load data using the key above</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Dispute Resolution Modal -->
+  <div id="resolveModal" style="display:none" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-slate-800 rounded-xl border border-slate-700 p-8 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold text-slate-100 mb-4">Resolve Dispute</h3>
+      <div id="modalContent" class="space-y-4 mb-6 text-slate-300">
+        <!-- Filled in by JS -->
+      </div>
+      <div class="space-y-3 mb-6">
+        <label class="block text-sm font-semibold text-slate-400">Resolution Reason</label>
+        <textarea id="resolveReason" placeholder="e.g., Seller failed to deliver, buyer never received..."
+          class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="resolveBuyer()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded transition">
+          Release to Buyer
+        </button>
+        <button onclick="resolveSeller()" class="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-semibold px-4 py-2 rounded transition">
+          Refund to Seller
+        </button>
+        <button onclick="closeModal()" class="flex-1 bg-slate-600 hover:bg-slate-700 text-white font-semibold px-4 py-2 rounded transition">
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
 
@@ -221,8 +269,81 @@
     return `<span class="inline-block px-2 py-0.5 rounded text-xs font-semibold ${cls}">${status}</span>`;
   }
 
+  let currentDisputeId = null;
+
+  async function loadDisputes() {
+    const res = await authFetch(`${API}/admin/api/disputes`);
+    if (!res.ok) return;
+    const disputes = await res.json();
+    const tbody = document.getElementById('disputesBody');
+    if (!disputes || disputes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No disputed trades</td></tr>';
+      return;
+    }
+    tbody.innerHTML = disputes.map(d => `
+      <tr class="border-b border-slate-700 hover:bg-slate-750 bg-orange-900/10">
+        <td class="px-4 py-3 font-mono text-xs text-slate-400">${d.id.slice(0,8)}…</td>
+        <td class="px-4 py-3 font-mono text-xs">${trunc(d.buyer_id)}</td>
+        <td class="px-4 py-3 font-mono text-xs">${trunc(d.seller_id)}</td>
+        <td class="px-4 py-3 text-right">${d.trade_value != null ? fmt(d.trade_value) + ' ' + (d.currency || '') : '—'}</td>
+        <td class="px-4 py-3 text-slate-400 text-xs">${d.updated_at ? new Date(d.updated_at).toLocaleString() : '—'}</td>
+        <td class="px-4 py-3">
+          <button onclick="openResolveModal('${d.id}', '${d.buyer_id.slice(0,12)}', '${d.seller_id.slice(0,12)}', ${d.trade_value || 0}, '${d.currency || 'USD'}')"
+            class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-3 py-1 rounded transition">
+            Resolve
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function openResolveModal(tradeId, buyerId, sellerId, value, currency) {
+    currentDisputeId = tradeId;
+    const content = document.getElementById('modalContent');
+    content.innerHTML = `
+      <div><strong>Trade ID:</strong> ${tradeId.slice(0, 12)}…</div>
+      <div><strong>Buyer:</strong> ${buyerId}…</div>
+      <div><strong>Seller:</strong> ${sellerId}…</div>
+      <div><strong>Value:</strong> ${fmt(value)} ${currency}</div>
+    `;
+    document.getElementById('resolveModal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('resolveModal').style.display = 'none';
+    currentDisputeId = null;
+  }
+
+  async function resolveBuyer() {
+    await resolveDispute('buyer');
+  }
+
+  async function resolveSeller() {
+    await resolveDispute('seller');
+  }
+
+  async function resolveDispute(owner) {
+    const reason = document.getElementById('resolveReason').value;
+    if (!reason.trim()) {
+      alert('Please provide a reason for the resolution.');
+      return;
+    }
+    const res = await authFetch(`${API}/admin/api/disputes/${currentDisputeId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ releaseToOwner: owner, reason }),
+    });
+    if (res.ok) {
+      closeModal();
+      document.getElementById('resolveReason').value = '';
+      await loadDisputes();
+    } else {
+      const err = await res.json();
+      alert(`Error: ${err.error}`);
+    }
+  }
+
   async function loadAll() {
-    await Promise.all([loadStats(), loadFeeConfig(), loadTrades()]);
+    await Promise.all([loadStats(), loadFeeConfig(), loadDisputes(), loadTrades()]);
   }
 
   // Auto-load on page open (cookie auth handles it)

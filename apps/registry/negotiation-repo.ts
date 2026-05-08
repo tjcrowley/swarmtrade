@@ -168,4 +168,50 @@ export class PostgresNegotiationRepository implements NegotiationRepository {
       client.release();
     }
   }
+
+  async getDisputedTrades(): Promise<(Trade & { escrow_id?: string; escrow_amount?: string; escrow_locked_at?: string })[]> {
+    const client = await this.pool.connect();
+    try {
+      const res = await client.query(`
+        SELECT
+          h.handshake_id as id, h.buyer_id, h.seller_id, h.asset_id,
+          h.state as status, h.trade_value, h.currency, h.fee_amount, h.version, h.updated_at,
+          e.escrow_id, e.amount as escrow_amount, e.locked_at as escrow_locked_at
+        FROM handshakes h
+        LEFT JOIN escrow_records e ON h.handshake_id = e.trade_id
+        WHERE h.state = 'disputed'
+        ORDER BY h.updated_at DESC
+      `);
+      return res.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async resolveDispute(handshakeId: string, fromVersion: number, releaseToOwner: 'buyer' | 'seller', reason: string): Promise<Trade> {
+    const client = await this.pool.connect();
+    try {
+      // Update trade to resolved state (reason stored in quote field for now)
+      const quote = { resolution: releaseToOwner, reason, resolved_at: new Date().toISOString() };
+      const res = await client.query(
+        `UPDATE handshakes
+         SET state       = 'resolved',
+             quote       = $1::jsonb,
+             version     = version + 1,
+             updated_at  = NOW()
+         WHERE handshake_id = $2 AND version = $3
+         RETURNING handshake_id as id, buyer_id, seller_id, asset_id,
+                   state as status, quote, trade_value, currency, fee_bps, fee_amount, version`,
+        [JSON.stringify(quote), handshakeId, fromVersion]
+      );
+
+      if (res.rowCount === 0) {
+        throw new Error('StaleVersionError');
+      }
+
+      return res.rows[0];
+    } finally {
+      client.release();
+    }
+  }
 }
