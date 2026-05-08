@@ -6,11 +6,13 @@ export type TradeStatus =
   | 'countered'
   | 'accepted'
   | 'escrowed'
+  | 'delivery_confirmed'
   | 'settled'
   | 'rejected'
   | 'expired'
   | 'cancelled'
-  | 'disputed';
+  | 'disputed'
+  | 'resolved';
 
 export interface Trade {
   id: string;

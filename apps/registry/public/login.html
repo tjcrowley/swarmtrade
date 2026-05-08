@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwarmTrade Admin — Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: '#3b82f6' } } }
+    };
+  </script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans flex items-center justify-center">
+
+<div class="w-full max-w-sm">
+  <div class="text-center mb-8">
+    <span class="text-3xl font-bold text-blue-400">SwarmTrade</span>
+    <p class="text-slate-400 text-sm mt-1">Admin Dashboard</p>
+  </div>
+
+  <form id="loginForm" class="bg-slate-800 rounded-xl border border-slate-700 p-8 space-y-6">
+    <div>
+      <label for="adminKey" class="block text-xs font-semibold text-slate-400 uppercase mb-2">Admin API Key</label>
+      <input id="adminKey" type="password" placeholder="Enter admin key" autofocus
+        class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <button type="submit"
+      class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded transition">
+      Sign In
+    </button>
+    <p id="errorMsg" class="text-red-400 text-sm text-center hidden"></p>
+  </form>
+</div>
+
+<script>
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const key = document.getElementById('adminKey').value;
+    const errEl = document.getElementById('errorMsg');
+    errEl.classList.add('hidden');
+
+    try {
+      const res = await fetch('/admin/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      if (res.ok) {
+        window.location.href = '/admin/dashboard.html';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        errEl.textContent = data.error || 'Authentication failed';
+        errEl.classList.remove('hidden');
+      }
+    } catch {
+      errEl.textContent = 'Connection error';
+      errEl.classList.remove('hidden');
+    }
+  });
+</script>
+</body>
+</html>
