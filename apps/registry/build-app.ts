@@ -573,6 +573,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return await repo.getDisputedTrades();
   });
 
+  server.get('/admin/api/escrows', {
+    schema: { tags: ['admin'], summary: 'List escrow records with pagination' },
+  }, async (request) => {
+    const { limit = 25, offset = 0 } = request.query as { limit?: number; offset?: number };
+    const client = await pool.connect();
+    try {
+      const res = await client.query(
+        `SELECT e.escrow_id, e.trade_id, e.adapter, e.chain_id,
+                e.buyer_address, e.seller_address, e.amount, e.token,
+                e.status, e.tx_hash, e.created_at, e.updated_at
+         FROM escrow_records e
+         ORDER BY e.created_at DESC
+         LIMIT $1 OFFSET $2`,
+        [Math.min(Number(limit), 100), Number(offset)]
+      );
+      const countRes = await client.query('SELECT COUNT(*) AS total FROM escrow_records');
+      return { escrows: res.rows, total: parseInt(countRes.rows[0].total, 10) };
+    } finally {
+      client.release();
+    }
+  });
+
   server.post<{ Params: { id: string }; Body: { releaseToOwner: 'buyer' | 'seller'; reason: string } }>(
     '/admin/api/disputes/:id/resolve',
     {
