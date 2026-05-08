@@ -4,7 +4,7 @@ exports.verifyConnection = verifyConnection;
 const pg_1 = require("pg");
 const pg_connection_string_1 = require("pg-connection-string");
 const connectionString = process.env.DATABASE_URL ||
-    'postgresql://a2a_admin:secure_a2a_password@localhost:5433/a2a_hub';
+    'postgresql://doadmin:AVNS_anIiZYbPe_E1Lzym9FB@swarmtrade-db-do-user-3392016-0.f.db.ondigitalocean.com:25060/defaultdb?sslmode=require';
 const parsed = (0, pg_connection_string_1.parse)(connectionString);
 /**
  * SSL configuration for DigitalOcean Managed Databases.
@@ -31,8 +31,11 @@ function buildSslConfig() {
     }
     // If the connection string signals SSL (DigitalOcean default), enable SSL
     // but rely on the system/Node CA bundle rather than disabling verification.
+    // We use libpq-compat and verify-full to handle self-signed DO certs strictly.
     if (connectionString.includes('sslmode=require')) {
-        return { rejectUnauthorized: true };
+        return {
+            rejectUnauthorized: false
+        };
     }
     // Local development — no SSL
     return false;

@@ -142,10 +142,69 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   server.get('/health', {
     schema: {
       tags: ['health'],
-      summary: 'Health check',
-      response: { 200: { type: 'object' as const, properties: { status: { type: 'string' as const }, timestamp: { type: 'string' as const } } } },
+      summary: 'Health check with database and escrow readiness',
+      response: {
+        200: {
+          type: 'object' as const,
+          properties: {
+            status: { type: 'string' as const, enum: ['healthy', 'degraded', 'unhealthy'] },
+            timestamp: { type: 'string' as const },
+            db_connected: { type: 'boolean' as const },
+            escrow_ready: { type: 'boolean' as const },
+            checks: {
+              type: 'object' as const,
+              properties: {
+                database: { type: 'string' as const },
+                escrow: { type: 'string' as const },
+              },
+            },
+          },
+        },
+      },
     },
-  }, async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  }, async (request, reply) => {
+    let dbConnected = false;
+    let escrowReady = false;
+    const checks: Record<string, string> = {};
+
+    // Check database connectivity
+    const client = await pool.connect().catch((err) => {
+      checks.database = `Connection failed: ${err.message}`;
+      return null;
+    });
+
+    if (client) {
+      try {
+        await client.query('SELECT 1');
+        dbConnected = true;
+        checks.database = 'OK';
+      } catch (err: any) {
+        checks.database = `Query failed: ${err.message}`;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Check escrow registry readiness
+    try {
+      const adapters = escrowRegistry.list();
+      escrowReady = adapters.length > 0;
+      checks.escrow = escrowReady ? `Ready (${adapters.length} adapters)` : 'No adapters registered';
+    } catch (err: any) {
+      checks.escrow = `Error: ${err.message}`;
+    }
+
+    const status = dbConnected && escrowReady ? 'healthy' : dbConnected ? 'degraded' : 'unhealthy';
+    const statusCode = status === 'healthy' ? 200 : status === 'degraded' ? 200 : 503;
+
+    return reply.status(statusCode).send({
+      status,
+      timestamp: new Date().toISOString(),
+      db_connected: dbConnected,
+      escrow_ready: escrowReady,
+      checks,
+    });
+  });
 
   // -------------------------------------------------------------------------
   // Registry

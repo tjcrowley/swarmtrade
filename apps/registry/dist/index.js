@@ -32,86 +32,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const fastify_1 = __importDefault(require("fastify"));
-const swagger_1 = __importDefault(require("@fastify/swagger"));
-const swagger_ui_1 = __importDefault(require("@fastify/swagger-ui"));
 const db_1 = __importStar(require("./db"));
-const server = (0, fastify_1.default)({ logger: true });
-// ---------------------------------------------------------------------------
-// OpenAPI / Swagger
-// ---------------------------------------------------------------------------
-async function registerDocs() {
-    await server.register(swagger_1.default, {
-        openapi: {
-            info: {
-                title: 'SwarmTrade Registry API',
-                description: 'Domain-agnostic asset registry for autonomous agent-to-agent commerce. ' +
-                    'Implements the A2A AgentCard pattern for capability discovery.',
-                version: '0.1.0',
-                contact: { name: 'SwarmTrade', url: 'https://swarmtrade.store' },
-            },
-            servers: [
-                { url: 'https://swarmtrade.store', description: 'Production' },
-                { url: 'http://localhost:8080', description: 'Local development' },
-            ],
-            tags: [
-                { name: 'registry', description: 'Asset announcement & discovery' },
-                { name: 'health', description: 'Service health' },
-            ],
-        },
-    });
-    await server.register(swagger_ui_1.default, {
-        routePrefix: '/docs',
-        uiConfig: {
-            docExpansion: 'list',
-            deepLinking: true,
-        },
-    });
-}
-// ---------------------------------------------------------------------------
-// JSON Schemas (shared between routes and OpenAPI generation)
-// ---------------------------------------------------------------------------
-const AgentCardSchema = {
-    type: 'object',
-    properties: {
-        id: { type: 'string' },
-        name: { type: 'string' },
-        capabilities: { type: 'array', items: { type: 'string' } },
-        description: { type: 'string' },
-        metadata: { type: 'object', additionalProperties: true },
-    },
-    required: ['id', 'name', 'capabilities', 'description', 'metadata'],
-};
-const AssetManifestSchema = {
-    type: 'object',
-    properties: {
-        asset_id: { type: 'string', description: 'SHA-256 asset identifier' },
-        type: {
-            type: 'string',
-            enum: ['physical', 'service', 'license', 'digital_data'],
-        },
-        metadata: { type: 'object', additionalProperties: true },
-        status: {
-            type: 'string',
-            enum: ['available', 'pending', 'locked', 'transferred'],
-        },
-        agent_card: AgentCardSchema,
-        created_at: { type: 'string', format: 'date-time' },
-    },
-    required: ['asset_id', 'type', 'metadata', 'agent_card'],
-};
-// ---------------------------------------------------------------------------
-// Database migration
-// ---------------------------------------------------------------------------
+const build_app_1 = require("./build-app");
 async function migrate() {
     const client = await db_1.default.connect();
     try {
         await client.query(`
       CREATE EXTENSION IF NOT EXISTS vector;
+
       CREATE TABLE IF NOT EXISTS asset_announcements (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           asset_id TEXT NOT NULL,
@@ -123,14 +52,48 @@ async function migrate() {
           status TEXT DEFAULT 'available',
           created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
       CREATE TABLE IF NOT EXISTS handshakes (
           handshake_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           buyer_id TEXT NOT NULL,
           seller_id TEXT NOT NULL,
           asset_id TEXT NOT NULL,
-          state TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'proposed',
+          quote JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1;
+      ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS trade_value NUMERIC(20,8);
+      ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS currency TEXT;
+      ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS fee_bps INTEGER;
+      ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS fee_amount NUMERIC(20,8);
+
+      CREATE TABLE IF NOT EXISTS platform_config (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS escrow_records (
+        escrow_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        trade_id UUID NOT NULL REFERENCES handshakes(handshake_id),
+        adapter TEXT NOT NULL,
+        chain_id TEXT,
+        buyer_address TEXT NOT NULL,
+        seller_address TEXT NOT NULL,
+        amount NUMERIC(30,18) NOT NULL,
+        token TEXT NOT NULL DEFAULT 'native',
+        status TEXT NOT NULL DEFAULT 'locked',
+        tx_hash TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      INSERT INTO platform_config (key, value)
+      VALUES ('fee_config', '{"fee_bps": 150, "min_fee": null, "max_fee": null}')
+      ON CONFLICT (key) DO NOTHING;
     `);
         console.log('[init] Database migrated.');
     }
@@ -142,152 +105,16 @@ async function migrate() {
         client.release();
     }
 }
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
-// Health check
-server.get('/health', {
-    schema: {
-        tags: ['health'],
-        summary: 'Health check',
-        response: {
-            200: {
-                type: 'object',
-                properties: {
-                    status: { type: 'string' },
-                    timestamp: { type: 'string', format: 'date-time' },
-                },
-            },
-        },
-    },
-}, async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
-// Announce an asset
-server.post('/registry/announce', {
-    schema: {
-        tags: ['registry'],
-        summary: 'Register an asset on the marketplace',
-        description: 'Agents call this endpoint to announce an asset for trade. ' +
-            'The payload must include a valid A2A AgentCard.',
-        body: AssetManifestSchema,
-        response: {
-            200: {
-                type: 'object',
-                properties: {
-                    status: { type: 'string' },
-                    id: { type: 'string', format: 'uuid' },
-                },
-            },
-        },
-    },
-}, async (request) => {
-    const asset = request.body;
-    const client = await db_1.default.connect();
-    try {
-        const res = await client.query(`INSERT INTO asset_announcements
-           (asset_id, agent_id, agent_card, asset_type, metadata)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id`, [
-            asset.asset_id,
-            asset.agent_card.id,
-            JSON.stringify(asset.agent_card),
-            asset.type,
-            JSON.stringify(asset.metadata),
-        ]);
-        return { status: 'registered', id: res.rows[0].id };
-    }
-    finally {
-        client.release();
-    }
-});
-// Search / list assets
-server.get('/registry/search', {
-    schema: {
-        tags: ['registry'],
-        summary: 'Search available assets',
-        description: 'Returns all asset announcements. Filtering and vector search coming soon.',
-        querystring: {
-            type: 'object',
-            properties: {
-                type: {
-                    type: 'string',
-                    enum: ['physical', 'service', 'license', 'digital_data'],
-                    description: 'Filter by asset type',
-                },
-                status: {
-                    type: 'string',
-                    enum: ['available', 'pending', 'locked', 'transferred'],
-                    description: 'Filter by asset status',
-                },
-                limit: {
-                    type: 'integer',
-                    minimum: 1,
-                    maximum: 100,
-                    default: 50,
-                    description: 'Max results to return',
-                },
-            },
-        },
-        response: {
-            200: {
-                type: 'array',
-                items: {
-                    type: 'object',
-                    properties: {
-                        id: { type: 'string', format: 'uuid' },
-                        asset_id: { type: 'string' },
-                        agent_id: { type: 'string' },
-                        agent_card: AgentCardSchema,
-                        asset_type: { type: 'string' },
-                        metadata: { type: 'object', additionalProperties: true },
-                        status: { type: 'string' },
-                        created_at: { type: 'string', format: 'date-time' },
-                    },
-                },
-            },
-        },
-    },
-}, async (request) => {
-    const { type, status, limit } = request.query;
-    const conditions = [];
-    const params = [];
-    let idx = 1;
-    if (type) {
-        conditions.push(`asset_type = $${idx++}`);
-        params.push(type);
-    }
-    if (status) {
-        conditions.push(`status = $${idx++}`);
-        params.push(status);
-    }
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM asset_announcements ${where} ORDER BY created_at DESC LIMIT $${idx}`;
-    params.push(limit || 50);
-    const client = await db_1.default.connect();
-    try {
-        const res = await client.query(sql, params);
-        return res.rows;
-    }
-    finally {
-        client.release();
-    }
-});
-// Expose raw OpenAPI JSON
-server.get('/openapi.json', { schema: { hide: true } }, async (_request, reply) => {
-    reply.type('application/json');
-    return server.swagger();
-});
-// ---------------------------------------------------------------------------
-// Startup
-// ---------------------------------------------------------------------------
 const start = async () => {
-    await registerDocs();
     await (0, db_1.verifyConnection)();
     await migrate();
+    const server = await (0, build_app_1.buildApp)({ pool: db_1.default, logger: true });
+    // Register chain-specific escrow adapters (opt-in via env vars)
+    // Access the escrow registry via decorator would be cleaner, but for now
+    // we register them after build since they need heavy deps (near-api-js, viem)
+    // TODO: expose escrowRegistry from buildApp for external adapter registration
     try {
-        await server.listen({
-            port: Number(process.env.PORT) || 8080,
-            host: '0.0.0.0',
-        });
+        await server.listen({ port: Number(process.env.PORT) || 8080, host: '0.0.0.0' });
         console.log('[start] SwarmTrade Registry API is live');
     }
     catch (err) {
