@@ -63,7 +63,8 @@ const pool = new Pool({
 });
 
 pool.on('error', (err) => {
-  console.error('[db] Unexpected error on idle client:', err);
+  // Log only the message, not the full error (which may contain the connection string)
+  console.error('[db] Unexpected error on idle client:', err.message);
 });
 
 pool.on('connect', () => {

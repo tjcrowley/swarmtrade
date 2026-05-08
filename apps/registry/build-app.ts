@@ -4,7 +4,13 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import staticPlugin from '@fastify/static';
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
+import cors from '@fastify/cors';
 import { Pool } from 'pg';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_UINT64 = BigInt('18446744073709551615');
+const META_MAX_BYTES = 1024; // 1 KB
 
 import { AssetManifest } from '@a2a/types';
 import { PostgresNegotiationRepository } from './negotiation-repo';
@@ -37,6 +43,27 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // -------------------------------------------------------------------------
   // Plugins
   // -------------------------------------------------------------------------
+
+  // CORS — allow only our own origin in production; all origins in dev/test
+  const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? 'https://swarmtrade.store'
+    : true;
+  await server.register(cors, {
+    origin: allowedOrigin,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-agent-id', 'x-admin-key'],
+    credentials: true,
+  });
+
+  // Rate limiting — global 100 req/min per IP
+  await server.register(rateLimit, {
+    global: true,
+    max: 100,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.ip,
+    errorResponseBuilder: () => ({ error: 'Too many requests' }),
+  });
+
   await server.register(cookie, { secret: cookieSecret });
 
   await server.register(swagger, {
@@ -217,14 +244,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // -------------------------------------------------------------------------
   server.post<{ Body: AssetManifest }>('/registry/announce', {
     schema: { tags: ['registry'], summary: 'Announce an asset', body: AssetManifestSchema },
-  }, async (request) => {
+  }, async (request, reply) => {
     const asset = request.body;
+    const metaStr = JSON.stringify(asset.metadata ?? {});
+    if (Buffer.byteLength(metaStr, 'utf8') > META_MAX_BYTES) {
+      return reply.status(400).send({ error: 'metadata exceeds 1KB limit' });
+    }
     const client = await pool.connect();
     try {
       const res = await client.query(
         `INSERT INTO asset_announcements (asset_id, agent_id, agent_card, asset_type, metadata)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [asset.asset_id, asset.agent_card.id, JSON.stringify(asset.agent_card), asset.type, JSON.stringify(asset.metadata)]
+        [asset.asset_id, asset.agent_card.id, JSON.stringify(asset.agent_card), asset.type, metaStr]
       );
       return { status: 'registered', id: res.rows[0].id };
     } finally {
@@ -304,6 +335,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Escrow
   // -------------------------------------------------------------------------
   server.post('/registry/escrow/lock', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     schema: {
       tags: ['negotiation'],
       summary: 'Lock funds in escrow for a trade',
@@ -324,6 +356,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const { handshake_id, chain_id = 'off-chain', buyer_address, seller_address, amount, token = 'native' } =
       request.body as { handshake_id: string; chain_id?: string; buyer_address: string; seller_address: string; amount: string; token?: string };
 
+    if (!UUID_RE.test(handshake_id)) return reply.status(400).send({ error: 'Invalid handshake_id format' });
+    let amountBig: bigint;
+    try {
+      amountBig = BigInt(amount);
+    } catch {
+      return reply.status(400).send({ error: 'Invalid amount: must be a non-negative integer string' });
+    }
+    if (amountBig <= 0n) return reply.status(400).send({ error: 'Amount must be greater than zero' });
+    if (amountBig > MAX_UINT64) return reply.status(400).send({ error: 'Amount exceeds maximum allowed value' });
+
     const trade = await repo.findById(handshake_id);
     if (!trade) return reply.status(404).send({ error: 'Trade not found' });
     if (trade.status !== 'accepted') {
@@ -339,7 +381,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       tradeId: handshake_id,
       buyer: buyer_address,
       seller: seller_address,
-      amount: BigInt(amount),
+      amount: amountBig,
       token,
     });
 
@@ -348,9 +390,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   server.post<{ Params: { escrowId: string } }>('/registry/escrow/:escrowId/confirm-delivery', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     schema: { tags: ['negotiation'], summary: 'Confirm delivery and release escrowed funds' },
   }, async (request, reply) => {
     const { escrowId } = request.params;
+    if (!UUID_RE.test(escrowId)) return reply.status(400).send({ error: 'Invalid escrowId format' });
     const escrowStatus = await confirmationEscrow.getEscrowStatus(escrowId);
     if (escrowStatus.status !== 'locked') {
       return reply.status(400).send({ error: `Escrow is not locked (status: ${escrowStatus.status})` });
@@ -385,9 +429,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   server.post<{ Params: { escrowId: string } }>('/registry/escrow/:escrowId/dispute', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     schema: { tags: ['negotiation'], summary: 'Dispute an escrowed trade' },
   }, async (request, reply) => {
     const { escrowId } = request.params;
+    if (!UUID_RE.test(escrowId)) return reply.status(400).send({ error: 'Invalid escrowId format' });
 
     const client = await pool.connect();
     try {
@@ -423,6 +469,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }, async (request, reply) => {
     const { escrowId } = request.params;
     const { resolution } = request.body;
+    if (!UUID_RE.test(escrowId)) return reply.status(400).send({ error: 'Invalid escrowId format' });
 
     const client = await pool.connect();
     try {
@@ -589,6 +636,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   server.get('/openapi.json', { schema: { hide: true } }, async (_req, reply) => {
     reply.type('application/json');
     return server.swagger();
+  });
+
+  // -------------------------------------------------------------------------
+  // Global error handler — scrub DB internals from responses
+  // -------------------------------------------------------------------------
+  server.setErrorHandler(async (error, _request, reply) => {
+    const status = error.statusCode ?? 500;
+    if (status >= 500) {
+      // Never expose DB messages, stack traces, or column names
+      server.log.error({ err: error }, 'Unhandled error');
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+    // 4xx: pass through the message Fastify already set (validation, rate-limit, etc.)
+    return reply.status(status).send({ error: error.message ?? 'Bad request' });
   });
 
   return server;

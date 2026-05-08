@@ -98,7 +98,7 @@ async function migrate() {
         console.log('[init] Database migrated.');
     }
     catch (err) {
-        console.error('[init] Migration failed:', err);
+        console.error('[init] Migration failed:', err.message);
         process.exit(1);
     }
     finally {

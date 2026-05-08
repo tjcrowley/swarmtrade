@@ -54,7 +54,8 @@ const pool = new pg_1.Pool({
     connectionTimeoutMillis: 10_000,
 });
 pool.on('error', (err) => {
-    console.error('[db] Unexpected error on idle client:', err);
+    // Log only the message, not the full error (which may contain the connection string)
+    console.error('[db] Unexpected error on idle client:', err.message);
 });
 pool.on('connect', () => {
     console.log('[db] New client connected to pool');
