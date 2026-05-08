@@ -1,0 +1,88 @@
+{
+  "name": "swarmtrade-registry",
+  "region": "sfo",
+  "services": [
+    {
+      "name": "registry-api",
+      "github": {
+        "repo": "tjcrowley/a2a-hub",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "dockerfile_path": "Dockerfile",
+      "instance_size_slug": "basic-xs",
+      "instance_count": 1,
+      "http_port": 8080,
+      "envs": [
+        {
+          "key": "DATABASE_URL",
+          "value": "postgresql://doadmin:AVNS_anIiZYbPe_E1Lzym9FB@swarmtrade-db-do-user-3392016-0.f.db.ondigitalocean.com:25060/defaultdb?sslmode=require",
+          "scope": "RUN_AND_BUILD_TIME"
+        },
+        {
+          "key": "CI",
+          "value": "true",
+          "scope": "BUILD_TIME"
+        },
+        {
+          "key": "PNPM_CONFIG_CI",
+          "value": "true",
+          "scope": "BUILD_TIME"
+        },
+        {
+          "key": "PNPM_CONFIG_CONFIRM_MODULES_PURGE",
+          "value": "false",
+          "scope": "BUILD_TIME"
+        },
+        {
+          "key": "DATABASE_CA_CERT",
+          "value": "-----BEGIN CERTIFICATE-----\nMIIETTCCArWgAwIBAgIUNPTwYVrErbdkq0C6VezLu3m+zTAwDQYJKoZIhvcNAQEM\nBQAwQDE+MDwGA1UEAww1YWY2MjEyNDEtM2I5Mi00ZmY0LWFhNjUtMGE2OWEyNjcy\nNGY5IEdFTiAxIFByb2plY3QgQ0EwHhcNMjUwMjA3MTg0ODUwWhcNMzUwMjA1MTg0\nODUwWjBAMT4wPAYDVQQDDDVhZjYyMTI0MS0zYjkyLTRmZjQtYWE2NS0wYTY5YTI2\nNzI0ZjkgR0VOIDEgUHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCC\nAYoCggGBALnl+hhV5ePqAEklsp/IEjRVEcnNBG8RZb+o57dAF475E/G6bkr86iB8\nXLZ/rKg8U9FU3YkCK7VnP67TZChtk6rR60AAz0ZcT+yG5tlIUqzL0UqZsic8ght6\n4ZceCyWZKsFxJa/K4Ezj/+PPlL+KjLFCrypbdjrqSubGFDnIGvECqTJGJegKBbZv\ncfP8fGiUJUVfkYjbhcO8mSafl8RLd5MftEkHUeo7ePsl6qohdfPVNcEWC+ofinzp\nEMEVl2ewYG6nrAwMOLwuRAL9IV302q8Q3hBYZK0jZQDqd1K4hOFrWYOaU4oXb/KR\n3VJhIDMYMf2kW86+OmC6jHf1deiIv5+t0NrYS0b1UqS+Vn0Sc5sxkik3hpDpO9RM\nwipVbUXOIz59dXHqXyZWr3NmU2d7hMhuG44/es8V/UXIpBm8FWkdkIfYIw5GsJwM\nycaVM84b8V1r5H93Os3tBkSecOcU0vZTIggUkjzJ4jBwTNMW4jFGVLhDravM0bx7\nFpFcshgtuQIDAQABoz8wPTAdBgNVHQ4EFgQU+DT2lUhAHqkzBw7o+3dclFZegpEw\nDwYDVR0TBAgwBgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGB\nALBVPQE1TGvdvArSbYxG8uzDDznYOJVyRKNG1fj0nDBoCEtQBaVj/oA9873xEdfn\n9512BQmS5bEWMjbY/Q6MtlB4hNYxj/apYOlzQjN+Z4bfXE7GXFb3lrqQ8AMCSTUb\nnDN4vWaPQy9XJxwlMBBD/2yeaABE3pVaVb3krx9M6xD4OFMlPgCO82QscIkMdfvP\nFvslZSmuJKCG/T64jUcWYTAY9PISuk26PPLoTxcrnB7TEr/ipoRQbV4loBLBq+2y\nPwRaVVGklmJR88pH4aS9YCGsAoq4xrvOzEZHLoY54dOlGDj/nqb8698X1gLS7hjS\nNPb1FY7fsltuIRHt5Z0cc2duCiDd4W9QOMw2/Of7ds+RapsUio2RBTP53dRWHff/\n/J33/3FhA9tetO0RdeFelHtVVtCe6XDcrMAZHAz+VT6DstS0iFi+nSNS3j1qoc1x\nFeP4nd/+7ne42GsdFsP5YJRxYE0IX9+zQU6FmBu62N1/+J4/JOY/tTHZHQNLsas9\njQ==\n-----END CERTIFICATE-----\n",
+          "scope": "RUN_AND_BUILD_TIME"
+        }
+      ]
+    }
+  ],
+  "static_sites": [
+    {
+      "name": "landing-page",
+      "github": {
+        "repo": "tjcrowley/a2a-hub",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "source_dir": ".",
+      "output_dir": "public",
+      "catchall_document": "index.html"
+    }
+  ],
+  "domains": [
+    {
+      "domain": "swarmtrade.store",
+      "type": "PRIMARY"
+    }
+  ],
+  "ingress": {
+    "rules": [
+      {
+        "match": {
+          "path": {
+            "prefix": "/api"
+          }
+        },
+        "component": {
+          "name": "registry-api"
+        }
+      },
+      {
+        "match": {
+          "path": {
+            "prefix": "/"
+          }
+        },
+        "component": {
+          "name": "landing-page"
+        }
+      }
+    ]
+  }
+}
