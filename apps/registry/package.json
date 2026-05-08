@@ -14,8 +14,8 @@
   "dependencies": {
     "@a2a/types": "file:../../packages/types",
     "@fastify/cookie": "^9.0.0",
-    "@fastify/cors": "^11.2.0",
-    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/cors": "^9.0.0",
+    "@fastify/rate-limit": "^9.0.0",
     "@fastify/static": "^7.0.0",
     "@fastify/swagger": "^8.0.0",
     "@fastify/swagger-ui": "^4.0.0",
