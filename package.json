@@ -10,6 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "engines": {
+    "pnpm": "10.x"
+  },
   "devDependencies": {
     "turbo": "^2.0.0",
     "typescript": "^5.0.0",
