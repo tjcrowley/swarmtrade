@@ -15,5 +15,8 @@
     "typescript": "^5.0.0",
     "vitest": "^4.1.5"
   },
-  "type": "module"
+  "type": "module",
+  "pnpm": {
+    "onlyBuiltDependencies": ["secp256k1"]
+  }
 }
