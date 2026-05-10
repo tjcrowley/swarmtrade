@@ -23,10 +23,11 @@ export class EscrowRegistry {
     return this.adapters.get(chainId);
   }
 
-  list(): { chainId: string; name: string }[] {
+  list(): { chainId: string; name: string; escrowAddress?: string }[] {
     return Array.from(this.adapters.values()).map((a) => ({
       chainId: a.chainId,
       name: a.name,
+      ...('escrowAddress' in a ? { escrowAddress: (a as any).escrowAddress } : {}),
     }));
   }
 

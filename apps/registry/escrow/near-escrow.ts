@@ -16,7 +16,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
   readonly name = 'NEAR';
 
   private readonly pool: Pool;
-  private readonly escrowAccountId: string;
+  readonly escrowAddress: string; // NEAR account ID
   private readonly privateKey: string;
   private readonly networkId: string;
   private readonly rpcUrl: string;
@@ -38,7 +38,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
     }
 
     this.pool = pool;
-    this.escrowAccountId = accountId;
+    this.escrowAddress = accountId;
     this.privateKey = pk;
     this.networkId = process.env.NEAR_NETWORK || 'mainnet';
     this.chainId = `near:${this.networkId}`;
@@ -55,7 +55,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
 
     const keyStore = new keyStores.InMemoryKeyStore();
     const keyPair = KeyPair.fromString(this.privateKey as any);
-    await keyStore.setKey(this.networkId, this.escrowAccountId, keyPair);
+    await keyStore.setKey(this.networkId, this.escrowAddress, keyPair);
 
     this.nearConnection = await connect({
       networkId: this.networkId,
@@ -67,7 +67,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
 
   private async getAccount(): Promise<nearAPI.Account> {
     const near = await this.getConnection();
-    return near.account(this.escrowAccountId);
+    return near.account(this.escrowAddress);
   }
 
   async lockFunds(params: LockFundsParams): Promise<LockFundsResult> {
@@ -99,9 +99,9 @@ export class NearEscrowAdapter implements EscrowAdapter {
     const receiverId = txResult.transaction.receiver_id;
     if (params.token === 'native') {
       // For native NEAR transfers, receiver should be the escrow account
-      if (receiverId !== this.escrowAccountId) {
+      if (receiverId !== this.escrowAddress) {
         throw new Error(
-          `Deposit tx receiver (${receiverId}) does not match escrow account (${this.escrowAccountId})`
+          `Deposit tx receiver (${receiverId}) does not match escrow account (${this.escrowAddress})`
         );
       }
 
@@ -146,9 +146,9 @@ export class NearEscrowAdapter implements EscrowAdapter {
         'base64'
       ).toString('utf8');
       const ftArgs = JSON.parse(argsStr);
-      if (ftArgs.receiver_id !== this.escrowAccountId) {
+      if (ftArgs.receiver_id !== this.escrowAddress) {
         throw new Error(
-          `FT transfer receiver (${ftArgs.receiver_id}) does not match escrow account (${this.escrowAccountId})`
+          `FT transfer receiver (${ftArgs.receiver_id}) does not match escrow account (${this.escrowAddress})`
         );
       }
       const ftAmount = BigInt(ftArgs.amount);

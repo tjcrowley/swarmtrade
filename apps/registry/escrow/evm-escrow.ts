@@ -40,7 +40,7 @@ export class EvmEscrowAdapter implements EscrowAdapter {
 
   private readonly pool: Pool;
   private readonly numericChainId: number;
-  private readonly escrowAddress: Address;
+  readonly escrowAddress: Address;
   private readonly privateKey: Hex;
   private readonly rpcUrl: string | undefined;
 
