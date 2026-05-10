@@ -45,7 +45,7 @@ describe('Escrow edge cases', () => {
 
   beforeEach(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, logger: false, skipStatic: true });
+    app = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true });
   });
 
   afterAll(async () => {

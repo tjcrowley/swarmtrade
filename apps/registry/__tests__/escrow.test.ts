@@ -33,7 +33,7 @@ describe('Escrow happy path', () => {
 
   beforeEach(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, logger: false, skipStatic: true });
+    app = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true });
   });
 
   afterAll(async () => {
@@ -107,7 +107,7 @@ describe('Escrow dispute path', () => {
 
   beforeEach(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, logger: false, skipStatic: true });
+    app = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true });
   });
 
   afterAll(async () => {
@@ -231,7 +231,7 @@ describe('Escrow GET', () => {
 
   beforeEach(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, logger: false, skipStatic: true });
+    app = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true });
   });
 
   afterAll(async () => {

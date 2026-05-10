@@ -28,7 +28,10 @@ export interface AppDeps {
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { pool, logger = true, skipStatic = false } = deps;
-  const adminKey = deps.adminKey ?? process.env.ADMIN_API_KEY ?? 'changeme';
+  const adminKey = deps.adminKey ?? process.env.ADMIN_API_KEY;
+  if (!adminKey) {
+    throw new Error('ADMIN_API_KEY must be set (via deps.adminKey or ADMIN_API_KEY env var)');
+  }
   const cookieSecret = deps.cookieSecret ?? process.env.COOKIE_SECRET ?? adminKey;
 
   const server = fastify({ logger });

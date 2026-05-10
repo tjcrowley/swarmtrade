@@ -1,9 +1,10 @@
 import { Pool, PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgresql://doadmin:AVNS_anIiZYbPe_E1Lzym9FB@swarmtrade-db-do-user-3392016-0.f.db.ondigitalocean.com:25060/defaultdb?sslmode=require';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required');
+}
 
 const parsed = parse(connectionString);
 
