@@ -188,7 +188,7 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     const account = this.getAccount();
     const chain = this.getChain();
     const sellerAddress = record.seller_address as Address;
-    const amount = BigInt(record.amount);
+    const amount = BigInt(record.amount.split('.')[0]);
     let txHash: string;
 
     if (record.token === 'native') {
@@ -245,7 +245,7 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     const account = this.getAccount();
     const chain = this.getChain();
     const buyerAddress = record.buyer_address as Address;
-    const amount = BigInt(record.amount);
+    const amount = BigInt(record.amount.split('.')[0]);
     let txHash: string;
 
     if (record.token === 'native') {
@@ -301,7 +301,7 @@ export class EvmEscrowAdapter implements EscrowAdapter {
       const row = res.rows[0];
       return {
         status: row.status as EscrowStatus['status'],
-        amount: BigInt(row.amount),
+        amount: BigInt(row.amount.split('.')[0]),
         token: row.token,
       };
     } finally {

@@ -196,7 +196,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
     }
 
     const account = await this.getAccount();
-    const amount = BigInt(record.amount);
+    const amount = BigInt(record.amount.split('.')[0]);
     let txHash: string;
 
     if (record.token === 'native') {
@@ -256,7 +256,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
     }
 
     const account = await this.getAccount();
-    const amount = BigInt(record.amount);
+    const amount = BigInt(record.amount.split('.')[0]);
     let txHash: string;
 
     if (record.token === 'native') {
@@ -317,7 +317,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
       const row = res.rows[0];
       return {
         status: row.status as EscrowStatus['status'],
-        amount: BigInt(row.amount),
+        amount: BigInt(row.amount.split('.')[0]),
         token: row.token,
       };
     } finally {
