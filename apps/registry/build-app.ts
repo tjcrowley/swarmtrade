@@ -12,6 +12,25 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_UINT64 = BigInt('18446744073709551615');
 const META_MAX_BYTES = 1024; // 1 KB
 
+/** Sanitize adapter/viem errors to avoid leaking RPC URLs, stack traces, or Cloudflare HTML. */
+function sanitizeAdapterError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // Known application-level messages we authored — safe to surface
+  const safePatterns = [
+    /^metadata\.deposit_tx_hash is required/,
+    /^Invalid deposit_tx_hash format/,
+    /^Deposit transaction .{10,70} failed on-chain$/,
+    /^Deposit tx recipient .+ does not match escrow address/,
+    /^Deposit amount .+ is less than required/,
+    /^Escrow .+ is not in locked state/,
+    /^Escrow record .+ not found$/,
+    /^Failed to update escrow/,
+  ];
+  if (safePatterns.some(p => p.test(raw))) return raw;
+  // Everything else (viem internals, RPC errors, Cloudflare pages) gets scrubbed
+  return fallback;
+}
+
 import { AssetManifest } from '@a2a/types';
 import { PostgresNegotiationRepository } from './negotiation-repo';
 import { FeeConfigRepository } from './fee-config';
@@ -234,8 +253,8 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
     const checks: Record<string, string> = {};
 
     // Check database connectivity
-    const client = await pool.connect().catch((err) => {
-      checks.database = `Connection failed: ${err.message}`;
+    const client = await pool.connect().catch(() => {
+      checks.database = 'Connection failed';
       return null;
     });
 
@@ -244,8 +263,8 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
         await client.query('SELECT 1');
         dbConnected = true;
         checks.database = 'OK';
-      } catch (err: any) {
-        checks.database = `Query failed: ${err.message}`;
+      } catch {
+        checks.database = 'Query failed';
       } finally {
         client.release();
       }
@@ -256,8 +275,8 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       const adapters = escrowRegistry.list();
       escrowReady = adapters.length > 0;
       checks.escrow = escrowReady ? `Ready (${adapters.length} adapters)` : 'No adapters registered';
-    } catch (err: any) {
-      checks.escrow = `Error: ${err.message}`;
+    } catch {
+      checks.escrow = 'Error checking escrow readiness';
     }
 
     const status = dbConnected && escrowReady ? 'healthy' : dbConnected ? 'degraded' : 'unhealthy';
@@ -460,9 +479,9 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
         metadata,
       });
     } catch (err: any) {
-      // Adapter validation errors (bad tx hash, deposit not found, wrong recipient,
-      // wrong amount, etc.) should surface to the caller as 400, not 500.
-      const msg = err?.message ?? 'Escrow lock failed';
+      // Surface known validation errors; scrub RPC/viem internals
+      server.log.error({ err }, 'Escrow lock adapter error');
+      const msg = sanitizeAdapterError(err, 'Escrow lock failed — deposit transaction could not be verified on chain');
       return reply.status(400).send({ error: msg });
     }
 
@@ -515,7 +534,13 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       });
 
       const adapter = escrowRegistry.get(chainId) || confirmationEscrow;
-      const releaseResult = await adapter.releaseFunds({ escrowId, tradeId });
+      let releaseResult;
+      try {
+        releaseResult = await adapter.releaseFunds({ escrowId, tradeId });
+      } catch (err: any) {
+        server.log.error({ err }, 'Escrow release adapter error');
+        return reply.status(500).send({ error: 'Failed to release escrowed funds on chain' });
+      }
 
       const settleQuote: Record<string, any> = {};
       if (confirmed.trade_value !== null) settleQuote.trade_value = confirmed.trade_value;
@@ -606,12 +631,17 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       const adapter = escrowRegistry.get(chainId) || confirmationEscrow;
       let txHash: string;
 
-      if (resolution === 'release') {
-        const result = await adapter.releaseFunds({ escrowId, tradeId });
-        txHash = result.txHash;
-      } else {
-        const result = await adapter.refundFunds({ escrowId, tradeId });
-        txHash = result.txHash;
+      try {
+        if (resolution === 'release') {
+          const result = await adapter.releaseFunds({ escrowId, tradeId });
+          txHash = result.txHash;
+        } else {
+          const result = await adapter.refundFunds({ escrowId, tradeId });
+          txHash = result.txHash;
+        }
+      } catch (err: any) {
+        server.log.error({ err }, 'Escrow resolve adapter error');
+        return reply.status(500).send({ error: `Failed to ${resolution} escrowed funds on chain` });
       }
 
       const resolved = await repo.transition(tradeId, trade.version, 'resolved');
@@ -777,12 +807,18 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
         // releaseToOwner='seller' => seller wins the dispute => release escrowed funds to seller.
         // releaseToOwner='buyer'  => buyer wins the dispute  => refund escrowed funds to buyer.
         let txHash: string;
-        if (releaseToOwner === 'seller') {
-          const result = await adapter.releaseFunds({ escrowId, tradeId: id });
-          txHash = result.txHash;
-        } else {
-          const result = await adapter.refundFunds({ escrowId, tradeId: id });
-          txHash = result.txHash;
+        try {
+          if (releaseToOwner === 'seller') {
+            const result = await adapter.releaseFunds({ escrowId, tradeId: id });
+            txHash = result.txHash;
+          } else {
+            const result = await adapter.refundFunds({ escrowId, tradeId: id });
+            txHash = result.txHash;
+          }
+        } catch (err: any) {
+          server.log.error({ err }, 'Admin escrow resolve adapter error');
+          const action = releaseToOwner === 'seller' ? 'release' : 'refund';
+          return reply.status(500).send({ error: `Failed to ${action} escrowed funds on chain` });
         }
 
         const resolved = await repo.resolveDispute(id, trade.version, releaseToOwner, reason);

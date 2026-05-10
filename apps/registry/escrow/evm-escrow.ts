@@ -66,6 +66,14 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     this.chainId = `eip155:${numericChainId}`;
     this.name = chain.name;
 
+    if (!this.rpcUrl) {
+      console.warn(
+        `[evm-escrow] WARNING: EVM_RPC_URL_${numericChainId} is not set for ${chain.name}. ` +
+        `Viem will fall back to a public RPC which is rate-limited and unreliable. ` +
+        `Set EVM_RPC_URL_${numericChainId} to an Alchemy/Infura/QuickNode endpoint.`
+      );
+    }
+
     // Derive escrow (platform) wallet address from private key
     const account = privateKeyToAccount(this.privateKey);
     this.escrowAddress = account.address;
@@ -115,19 +123,28 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     const publicClient = this.getPublicClient();
 
     // Verify the transaction exists and is confirmed
-    const receipt: TransactionReceipt =
-      await publicClient.getTransactionReceipt({
+    let receipt: TransactionReceipt;
+    try {
+      receipt = await publicClient.getTransactionReceipt({
         hash: depositTxHash as Hex,
       });
+    } catch {
+      throw new Error('Deposit transaction not found on chain');
+    }
 
     if (receipt.status !== 'success') {
       throw new Error(`Deposit transaction ${depositTxHash} failed on-chain`);
     }
 
     // Verify the transaction details
-    const tx = await publicClient.getTransaction({
-      hash: depositTxHash as Hex,
-    });
+    let tx;
+    try {
+      tx = await publicClient.getTransaction({
+        hash: depositTxHash as Hex,
+      });
+    } catch {
+      throw new Error('Failed to fetch deposit transaction details from chain');
+    }
 
     // Check recipient is the platform escrow address
     if (
@@ -194,22 +211,27 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     const amount = BigInt(record.amount.split('.')[0]);
     let txHash: string;
 
-    if (record.token === 'native') {
-      txHash = await walletClient.sendTransaction({
-        account,
-        chain,
-        to: sellerAddress,
-        value: amount,
-      });
-    } else {
-      txHash = await walletClient.writeContract({
-        account,
-        chain,
-        address: record.token as Address,
-        abi: ERC20_TRANSFER_ABI,
-        functionName: 'transfer',
-        args: [sellerAddress, amount],
-      });
+    try {
+      if (record.token === 'native') {
+        txHash = await walletClient.sendTransaction({
+          account,
+          chain,
+          to: sellerAddress,
+          value: amount,
+        });
+      } else {
+        txHash = await walletClient.writeContract({
+          account,
+          chain,
+          address: record.token as Address,
+          abi: ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args: [sellerAddress, amount],
+        });
+      }
+    } catch (err) {
+      console.error('[evm-escrow] Release transaction failed:', err);
+      throw new Error('On-chain release transaction failed');
     }
 
     // Update DB
@@ -251,22 +273,27 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     const amount = BigInt(record.amount.split('.')[0]);
     let txHash: string;
 
-    if (record.token === 'native') {
-      txHash = await walletClient.sendTransaction({
-        account,
-        chain,
-        to: buyerAddress,
-        value: amount,
-      });
-    } else {
-      txHash = await walletClient.writeContract({
-        account,
-        chain,
-        address: record.token as Address,
-        abi: ERC20_TRANSFER_ABI,
-        functionName: 'transfer',
-        args: [buyerAddress, amount],
-      });
+    try {
+      if (record.token === 'native') {
+        txHash = await walletClient.sendTransaction({
+          account,
+          chain,
+          to: buyerAddress,
+          value: amount,
+        });
+      } else {
+        txHash = await walletClient.writeContract({
+          account,
+          chain,
+          address: record.token as Address,
+          abi: ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args: [buyerAddress, amount],
+        });
+      }
+    } catch (err) {
+      console.error('[evm-escrow] Refund transaction failed:', err);
+      throw new Error('On-chain refund transaction failed');
     }
 
     // Update DB
