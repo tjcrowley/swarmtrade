@@ -68,6 +68,22 @@ export function createInMemoryPool() {
       return { rows: [trade], rowCount: 1 };
     }
 
+    if (s.includes('UPDATE handshakes') && /SET state\s*=\s*'resolved'/.test(s)) {
+      // resolveDispute: SET state='resolved', quote=$1::jsonb WHERE handshake_id=$2 AND version=$3
+      const quoteJson = params?.[0] ? JSON.parse(params[0]) : null;
+      const hid = params?.[1];
+      const fromVersion = params?.[2];
+      const trade = handshakes.get(hid);
+      if (!trade || trade.version !== fromVersion) {
+        return { rows: [], rowCount: 0 };
+      }
+      trade.state = 'resolved';
+      trade.status = 'resolved';
+      if (quoteJson) trade.quote = quoteJson;
+      trade.version += 1;
+      return { rows: [{ ...trade, id: trade.handshake_id }], rowCount: 1 };
+    }
+
     if (s.includes('UPDATE handshakes') && s.includes('SET state')) {
       const nextState = params?.[0];
       const quoteJson = params?.[1] ? JSON.parse(params[1]) : null;
@@ -180,6 +196,38 @@ export function createInMemoryPool() {
       const escrow = escrows.get(eid);
       if (!escrow) return { rows: [], rowCount: 0 };
       return { rows: [escrow], rowCount: 1 };
+    }
+
+    if (s.includes('FROM escrow_records WHERE trade_id')) {
+      const tradeId = params?.[0];
+      const match = Array.from(escrows.values()).find(e => e.trade_id === tradeId);
+      if (!match) return { rows: [], rowCount: 0 };
+      return { rows: [match], rowCount: 1 };
+    }
+
+    // Disputes admin query (joins handshakes + escrow_records WHERE state='disputed')
+    if (s.includes('FROM handshakes h') && s.includes("state = 'disputed'")) {
+      const rows = Array.from(handshakes.values())
+        .filter(t => t.state === 'disputed')
+        .map(t => {
+          const escrow = Array.from(escrows.values()).find(e => e.trade_id === t.handshake_id);
+          return {
+            id: t.handshake_id,
+            buyer_id: t.buyer_id,
+            seller_id: t.seller_id,
+            asset_id: t.asset_id,
+            status: t.state,
+            trade_value: t.trade_value,
+            currency: t.currency,
+            fee_amount: t.fee_amount,
+            version: t.version,
+            updated_at: t.updated_at,
+            escrow_id: escrow?.escrow_id,
+            escrow_amount: escrow?.amount,
+            escrow_locked_at: escrow?.created_at,
+          };
+        });
+      return { rows, rowCount: rows.length };
     }
 
     // --- platform_config ---

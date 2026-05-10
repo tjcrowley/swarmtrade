@@ -11,7 +11,7 @@ describe('Admin API', () => {
 
   beforeAll(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, adminKey: ADMIN_KEY, logger: false, skipStatic: true });
+    ({ server: app } = await buildApp({ pool, adminKey: ADMIN_KEY, logger: false, skipStatic: true }));
   });
 
   afterAll(async () => {

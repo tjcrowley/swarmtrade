@@ -11,7 +11,7 @@ describe('Admin trades API', () => {
 
   beforeEach(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, adminKey: 'test-admin', logger: false, skipStatic: true });
+    ({ server: app } = await buildApp({ pool, adminKey: 'test-admin', logger: false, skipStatic: true }));
   });
 
   afterAll(async () => {

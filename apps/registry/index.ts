@@ -76,12 +76,21 @@ const start = async () => {
   await verifyConnection();
   await migrate();
 
-  const server = await buildApp({ pool, logger: true });
+  const { server, escrowRegistry } = await buildApp({ pool, logger: true });
 
   // Register chain-specific escrow adapters (opt-in via env vars)
-  // Access the escrow registry via decorator would be cleaner, but for now
-  // we register them after build since they need heavy deps (near-api-js, viem)
-  // TODO: expose escrowRegistry from buildApp for external adapter registration
+  if (process.env.ESCROW_WALLET_PRIVATE_KEY) {
+    const evmChains = [1, 8453, 137];
+    for (const numericChainId of evmChains) {
+      try {
+        const adapter = new EvmEscrowAdapter(pool, numericChainId);
+        escrowRegistry.register(adapter);
+        console.log(`[init] Registered EVM escrow adapter: ${adapter.chainId}`);
+      } catch (err) {
+        console.warn(`[init] Skipped EVM chain ${numericChainId}: ${(err as Error).message}`);
+      }
+    }
+  }
 
   try {
     await server.listen({ port: Number(process.env.PORT) || 8080, host: '0.0.0.0' });

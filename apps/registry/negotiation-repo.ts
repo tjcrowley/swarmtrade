@@ -176,7 +176,7 @@ export class PostgresNegotiationRepository implements NegotiationRepository {
         SELECT
           h.handshake_id as id, h.buyer_id, h.seller_id, h.asset_id,
           h.state as status, h.trade_value, h.currency, h.fee_amount, h.version, h.updated_at,
-          e.escrow_id, e.amount as escrow_amount, e.locked_at as escrow_locked_at
+          e.escrow_id, e.amount as escrow_amount, e.created_at as escrow_locked_at
         FROM handshakes h
         LEFT JOIN escrow_records e ON h.handshake_id = e.trade_id
         WHERE h.state = 'disputed'

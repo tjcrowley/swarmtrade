@@ -23,7 +23,7 @@ describe('Negotiation happy path', () => {
 
   beforeAll(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true });
+    ({ server: app } = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true }));
   });
 
   afterAll(async () => {
@@ -150,7 +150,7 @@ describe('Health check', () => {
 
   beforeAll(async () => {
     const pool = createInMemoryPool();
-    app = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true });
+    ({ server: app } = await buildApp({ pool, adminKey: 'test-key', logger: false, skipStatic: true }));
   });
 
   afterAll(async () => {

@@ -26,7 +26,12 @@ export interface AppDeps {
   skipStatic?: boolean;
 }
 
-export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+export interface AppResult {
+  server: FastifyInstance;
+  escrowRegistry: EscrowRegistry;
+}
+
+export async function buildApp(deps: AppDeps): Promise<AppResult> {
   const { pool, logger = true, skipStatic = false } = deps;
   const adminKey = deps.adminKey ?? process.env.ADMIN_API_KEY;
   if (!adminKey) {
@@ -405,10 +410,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     const client = await pool.connect();
     try {
-      const escrowRes = await client.query('SELECT trade_id FROM escrow_records WHERE escrow_id = $1', [escrowId]);
+      const escrowRes = await client.query('SELECT trade_id, chain_id FROM escrow_records WHERE escrow_id = $1', [escrowId]);
       if (escrowRes.rowCount === 0) return reply.status(404).send({ error: 'Escrow record not found' });
 
       const tradeId: string = escrowRes.rows[0].trade_id;
+      const chainId: string = escrowRes.rows[0].chain_id || 'off-chain';
       const trade = await repo.findById(tradeId);
       if (!trade) return reply.status(404).send({ error: 'Trade not found' });
       if (trade.status !== 'escrowed') {
@@ -417,7 +423,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
       const confirmed = await repo.transition(tradeId, trade.version, 'delivery_confirmed');
 
-      const adapter = escrowRegistry.get('off-chain') || confirmationEscrow;
+      const adapter = escrowRegistry.get(chainId) || confirmationEscrow;
       const releaseResult = await adapter.releaseFunds({ escrowId, tradeId });
 
       const settleQuote: Record<string, any> = {};
@@ -476,17 +482,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     const client = await pool.connect();
     try {
-      const escrowRes = await client.query('SELECT trade_id FROM escrow_records WHERE escrow_id = $1', [escrowId]);
+      const escrowRes = await client.query('SELECT trade_id, chain_id FROM escrow_records WHERE escrow_id = $1', [escrowId]);
       if (escrowRes.rowCount === 0) return reply.status(404).send({ error: 'Escrow record not found' });
 
       const tradeId: string = escrowRes.rows[0].trade_id;
+      const chainId: string = escrowRes.rows[0].chain_id || 'off-chain';
       const trade = await repo.findById(tradeId);
       if (!trade) return reply.status(404).send({ error: 'Trade not found' });
       if (trade.status !== 'disputed') {
         return reply.status(400).send({ error: `Trade must be in 'disputed' state, currently '${trade.status}'` });
       }
 
-      const adapter = escrowRegistry.get('off-chain') || confirmationEscrow;
+      const adapter = escrowRegistry.get(chainId) || confirmationEscrow;
       let txHash: string;
 
       if (resolution === 'release') {
@@ -604,12 +611,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       schema: {
         tags: ['admin'],
         summary: 'Resolve a disputed trade',
+        description: 'releaseToOwner=seller releases funds to the seller (they delivered). releaseToOwner=buyer refunds the buyer (deal failed). Both branches call the escrow adapter to move funds.',
         body: {
           type: 'object' as const,
           required: ['releaseToOwner', 'reason'],
           properties: {
-            releaseToOwner: { type: 'string' as const, enum: ['buyer', 'seller'], description: 'Release funds to buyer or refund to seller' },
-            reason: { type: 'string' as const, description: 'Reason for resolution' },
+            releaseToOwner: { type: 'string' as const, enum: ['buyer', 'seller'], description: 'seller = release funds to seller; buyer = refund funds to buyer' },
+            reason: { type: 'string' as const, description: 'Reason for resolution (audit trail)' },
           },
         },
       },
@@ -622,7 +630,36 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       if (trade.status !== 'disputed') {
         return reply.status(400).send({ error: `Trade is not disputed (status: ${trade.status})` });
       }
-      return await repo.resolveDispute(id, trade.version, releaseToOwner, reason);
+
+      const client = await pool.connect();
+      try {
+        const escrowRes = await client.query(
+          'SELECT escrow_id, chain_id FROM escrow_records WHERE trade_id = $1',
+          [id]
+        );
+        if (escrowRes.rowCount === 0) {
+          return reply.status(404).send({ error: 'Escrow record not found for trade' });
+        }
+        const escrowId: string = escrowRes.rows[0].escrow_id;
+        const chainId: string = escrowRes.rows[0].chain_id || 'off-chain';
+        const adapter = escrowRegistry.get(chainId) || confirmationEscrow;
+
+        // releaseToOwner='seller' => seller wins the dispute => release escrowed funds to seller.
+        // releaseToOwner='buyer'  => buyer wins the dispute  => refund escrowed funds to buyer.
+        let txHash: string;
+        if (releaseToOwner === 'seller') {
+          const result = await adapter.releaseFunds({ escrowId, tradeId: id });
+          txHash = result.txHash;
+        } else {
+          const result = await adapter.refundFunds({ escrowId, tradeId: id });
+          txHash = result.txHash;
+        }
+
+        const resolved = await repo.resolveDispute(id, trade.version, releaseToOwner, reason);
+        return { ...resolved, escrow_id: escrowId, escrow_tx_hash: txHash, released_to: releaseToOwner };
+      } finally {
+        client.release();
+      }
     }
   );
 
@@ -677,5 +714,5 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(status).send({ error: error.message ?? 'Bad request' });
   });
 
-  return server;
+  return { server, escrowRegistry };
 }
