@@ -244,6 +244,7 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       db_connected: dbConnected,
       escrow_ready: escrowReady,
       checks,
+      adapters: escrowRegistry.list(),
     });
   });
 
