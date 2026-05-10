@@ -681,8 +681,9 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
   server.post('/admin/api/login', {
     schema: { tags: ['admin'], summary: 'Authenticate with admin key', hide: true },
   }, async (request, reply) => {
-    const { key } = request.body as { key?: string };
-    if (key !== adminKey) {
+    const { key, password } = request.body as { key?: string; password?: string };
+    const provided = key || password;
+    if (provided !== adminKey) {
       return reply.status(401).send({ error: 'Invalid admin key' });
     }
     const value = JSON.stringify({ authenticated: true, ts: Date.now() });

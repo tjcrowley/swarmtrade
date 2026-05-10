@@ -65,6 +65,16 @@ describe('Admin API', () => {
     expect(logoutRes.statusCode).toBe(200);
   });
 
+  it('accepts login with password field (alias for key)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/api/login',
+      payload: { password: ADMIN_KEY },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
   it('rejects login with wrong key', async () => {
     const res = await app.inject({
       method: 'POST',
