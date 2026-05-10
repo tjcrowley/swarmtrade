@@ -72,7 +72,7 @@ export class ConfirmationEscrowAdapter implements EscrowAdapter {
       const row = res.rows[0];
       return {
         status: row.status as EscrowStatus['status'],
-        amount: BigInt(row.amount),
+        amount: BigInt(row.amount.split('.')[0]),
         token: row.token,
       };
     } finally {
