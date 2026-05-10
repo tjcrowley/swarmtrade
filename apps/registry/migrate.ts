@@ -30,6 +30,7 @@ async function migrate() {
           updated_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS quote JSONB;
       ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1;
       ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS trade_value NUMERIC(20,8);
       ALTER TABLE handshakes ADD COLUMN IF NOT EXISTS currency TEXT;
