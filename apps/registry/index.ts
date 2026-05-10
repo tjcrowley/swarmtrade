@@ -80,7 +80,7 @@ const start = async () => {
 
   // Register chain-specific escrow adapters (opt-in via env vars)
   if (process.env.ESCROW_WALLET_PRIVATE_KEY) {
-    const evmChains = [1, 8453, 137];
+    const evmChains = [1, 8453, 137, 11155111, 84532];
     for (const numericChainId of evmChains) {
       try {
         const adapter = new EvmEscrowAdapter(pool, numericChainId);
@@ -89,6 +89,16 @@ const start = async () => {
       } catch (err) {
         console.warn(`[init] Skipped EVM chain ${numericChainId}: ${(err as Error).message}`);
       }
+    }
+  }
+
+  if (process.env.NEAR_ESCROW_ACCOUNT_ID) {
+    try {
+      const nearAdapter = new NearEscrowAdapter(pool);
+      escrowRegistry.register(nearAdapter);
+      console.log(`[init] Registered NEAR escrow adapter: ${nearAdapter.chainId}`);
+    } catch (err) {
+      console.warn(`[init] Skipped NEAR: ${(err as Error).message}`);
     }
   }
 

@@ -12,7 +12,7 @@ import {
   type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet, base, polygon } from 'viem/chains';
+import { mainnet, base, polygon, baseSepolia, sepolia } from 'viem/chains';
 import {
   EscrowAdapter,
   LockFundsParams,
@@ -30,6 +30,8 @@ const CHAIN_MAP: Record<number, Chain> = {
   1: mainnet,
   8453: base,
   137: polygon,
+  11155111: sepolia,
+  84532: baseSepolia,
 };
 
 export class EvmEscrowAdapter implements EscrowAdapter {
