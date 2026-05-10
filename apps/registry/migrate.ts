@@ -50,7 +50,7 @@ async function migrate() {
           chain_id TEXT,
           buyer_address TEXT NOT NULL,
           seller_address TEXT NOT NULL,
-          amount NUMERIC(30,18) NOT NULL,
+          amount NUMERIC(78,0) NOT NULL,
           token TEXT NOT NULL DEFAULT 'native',
           status TEXT NOT NULL DEFAULT 'locked',
           tx_hash TEXT,
