@@ -62,6 +62,33 @@ async function migrate() {
       INSERT INTO platform_config (key, value)
       VALUES ('fee_config', '{"fee_bps": 150, "min_fee": null, "max_fee": null}')
       ON CONFLICT (key) DO NOTHING;
+
+      CREATE TABLE IF NOT EXISTS notification_subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id TEXT NOT NULL,
+        webhook_url TEXT,
+        email TEXT,
+        events TEXT[] DEFAULT '{}',
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT sub_has_target CHECK (webhook_url IS NOT NULL OR email IS NOT NULL)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sub_agent_webhook ON notification_subscriptions (agent_id, webhook_url) WHERE webhook_url IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sub_agent_email ON notification_subscriptions (agent_id, email) WHERE email IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS notification_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        subscription_id UUID REFERENCES notification_subscriptions(id),
+        trade_id UUID,
+        event TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        payload JSONB,
+        status TEXT DEFAULT 'pending',
+        attempts INTEGER DEFAULT 0,
+        last_error TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
     console.log('[init] Database migrated.');
   } catch (err) {

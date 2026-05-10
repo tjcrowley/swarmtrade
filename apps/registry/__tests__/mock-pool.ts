@@ -39,12 +39,159 @@ export function createInMemoryPool() {
   const config = new Map<string, any>([
     ['fee_config', { fee_bps: 150, min_fee: null, max_fee: null }],
   ]);
+  const notificationSubs = new Map<string, any>();
+  const notificationLogs: any[] = [];
 
   let idCounter = 0;
   const nextId = () => `00000000-0000-0000-0000-${String(++idCounter).padStart(12, '0')}`;
 
   function handleQuery(sql: string, params?: any[]): { rows: any[]; rowCount: number } {
     const s = sql.replace(/\s+/g, ' ').trim();
+
+    // --- notification_subscriptions ---
+    if (s.includes('INSERT INTO notification_subscriptions')) {
+      // Upsert logic: check for existing sub
+      const agentId = params?.[0];
+      const webhookUrl = params?.[1] ?? null;
+      const email = params?.[1] === undefined ? params?.[1] : (params?.[2] ?? null);
+      const events = params?.[2] !== undefined ? params?.[2] : (params?.[1] !== undefined ? params?.[2] : []);
+
+      // Determine params based on which INSERT variant
+      let subAgentId: string;
+      let subWebhookUrl: string | null;
+      let subEmail: string | null;
+      let subEvents: string[];
+
+      if (s.includes('webhook_url, email, events') && s.includes('ON CONFLICT (agent_id, webhook_url)')) {
+        // INSERT with webhook: params = [agentId, webhook_url, email, events]
+        subAgentId = params?.[0];
+        subWebhookUrl = params?.[1];
+        subEmail = params?.[2];
+        subEvents = params?.[3] || [];
+      } else if (s.includes('ON CONFLICT (agent_id, email)')) {
+        // INSERT with email only: params = [agentId, email, events]
+        subAgentId = params?.[0];
+        subWebhookUrl = null;
+        subEmail = params?.[1];
+        subEvents = params?.[2] || [];
+      } else {
+        subAgentId = params?.[0];
+        subWebhookUrl = params?.[1];
+        subEmail = params?.[2];
+        subEvents = params?.[3] || [];
+      }
+
+      // Check for existing
+      const existing = Array.from(notificationSubs.values()).find(sub => {
+        if (subWebhookUrl) return sub.agent_id === subAgentId && sub.webhook_url === subWebhookUrl;
+        if (subEmail) return sub.agent_id === subAgentId && sub.email === subEmail;
+        return false;
+      });
+
+      if (existing) {
+        // Upsert — update in place
+        if (subEmail && subWebhookUrl) existing.email = subEmail;
+        existing.events = subEvents;
+        existing.active = true;
+        existing.updated_at = new Date().toISOString();
+        return { rows: [{ ...existing }], rowCount: 1 };
+      }
+
+      const id = nextId();
+      const sub = {
+        id,
+        agent_id: subAgentId,
+        webhook_url: subWebhookUrl,
+        email: subEmail,
+        events: subEvents,
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      notificationSubs.set(id, sub);
+      return { rows: [{ ...sub }], rowCount: 1 };
+    }
+
+    if (s.includes('UPDATE notification_subscriptions') && s.includes('active = false')) {
+      const subId = params?.[0];
+      const agentId = params?.[1];
+      const sub = notificationSubs.get(subId);
+      if (sub && sub.agent_id === agentId) {
+        sub.active = false;
+        sub.updated_at = new Date().toISOString();
+        return { rows: [{ ...sub }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (s.includes('FROM notification_subscriptions') && s.includes('agent_id = ANY')) {
+      const agentIds: string[] = params?.[0] || [];
+      const rows = Array.from(notificationSubs.values())
+        .filter(sub => agentIds.includes(sub.agent_id) && sub.active);
+      return { rows, rowCount: rows.length };
+    }
+
+    if (s.includes('FROM notification_subscriptions') && s.includes('agent_id =') && s.includes('active = true')) {
+      const agentId = params?.[0];
+      const rows = Array.from(notificationSubs.values())
+        .filter(sub => sub.agent_id === agentId && sub.active);
+      return { rows, rowCount: rows.length };
+    }
+
+    // --- notification_log ---
+    if (s.includes('INSERT INTO notification_log')) {
+      const id = nextId();
+      const log = {
+        id,
+        subscription_id: params?.[0],
+        trade_id: params?.[1],
+        event: params?.[2],
+        channel: params?.[3],
+        payload: params?.[4] ? JSON.parse(params[4]) : null,
+        status: params?.[5],
+        attempts: params?.[6],
+        last_error: params?.[7],
+        created_at: new Date().toISOString(),
+      };
+      notificationLogs.push(log);
+      return { rows: [{ id }], rowCount: 1 };
+    }
+
+    if (s.includes('FROM notification_log nl') && s.includes('JOIN notification_subscriptions ns') && s.includes('COUNT(*)')) {
+      const agentId = params?.[0];
+      const count = notificationLogs.filter(log => {
+        const sub = notificationSubs.get(log.subscription_id);
+        return sub && sub.agent_id === agentId;
+      }).length;
+      return { rows: [{ total: String(count) }], rowCount: 1 };
+    }
+
+    if (s.includes('FROM notification_log nl') && s.includes('JOIN notification_subscriptions ns')) {
+      const agentId = params?.[0];
+      const limit = params?.[1] ?? 50;
+      const offset = params?.[2] ?? 0;
+      const rows = notificationLogs
+        .filter(log => {
+          const sub = notificationSubs.get(log.subscription_id);
+          return sub && sub.agent_id === agentId;
+        })
+        .reverse()
+        .slice(Number(offset), Number(offset) + Number(limit));
+      return { rows, rowCount: rows.length };
+    }
+
+    if (s.includes('FROM notification_log') && s.includes('COUNT(*)') && !s.includes('JOIN')) {
+      return { rows: [{ total: String(notificationLogs.length) }], rowCount: 1 };
+    }
+
+    if (s.includes('FROM notification_log') && !s.includes('JOIN')) {
+      const limit = params?.[0] ?? 50;
+      const offset = params?.[1] ?? 0;
+      const rows = [...notificationLogs]
+        .reverse()
+        .slice(Number(offset), Number(offset) + Number(limit));
+      return { rows, rowCount: rows.length };
+    }
 
     // --- handshakes ---
     if (s.includes('INSERT INTO handshakes')) {
@@ -205,6 +352,19 @@ export function createInMemoryPool() {
       return { rows: [match], rowCount: 1 };
     }
 
+    // Escrows admin listing (ORDER BY with LIMIT/OFFSET)
+    if (s.includes('FROM escrow_records e') && s.includes('ORDER BY')) {
+      const limit = params?.[0] ?? 25;
+      const offset = params?.[1] ?? 0;
+      const rows = Array.from(escrows.values())
+        .slice(Number(offset), Number(offset) + Number(limit));
+      return { rows, rowCount: rows.length };
+    }
+
+    if (s.includes('COUNT(*)') && s.includes('FROM escrow_records') && !s.includes('WHERE')) {
+      return { rows: [{ total: String(escrows.size) }], rowCount: 1 };
+    }
+
     // Disputes admin query (joins handshakes + escrow_records WHERE state='disputed')
     if (s.includes('FROM handshakes h') && s.includes("state = 'disputed'")) {
       const rows = Array.from(handshakes.values())
@@ -262,6 +422,8 @@ export function createInMemoryPool() {
     _escrows: escrows,
     _assets: assets,
     _config: config,
+    _notificationSubs: notificationSubs,
+    _notificationLogs: notificationLogs,
   };
 
   return pool as any;

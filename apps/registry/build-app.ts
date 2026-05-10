@@ -17,6 +17,7 @@ import { PostgresNegotiationRepository } from './negotiation-repo';
 import { FeeConfigRepository } from './fee-config';
 import { EscrowRegistry, ConfirmationEscrowAdapter } from './escrow';
 import { recordResponse } from './alert';
+import { NotificationService, STATUS_EVENT_MAP } from './notifications';
 
 export interface AppDeps {
   pool: Pool;
@@ -29,6 +30,7 @@ export interface AppDeps {
 export interface AppResult {
   server: FastifyInstance;
   escrowRegistry: EscrowRegistry;
+  notificationService: NotificationService;
 }
 
 export async function buildApp(deps: AppDeps): Promise<AppResult> {
@@ -44,6 +46,7 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
   const feeRepo = new FeeConfigRepository(pool);
   const confirmationEscrow = new ConfirmationEscrowAdapter(pool);
   const escrowRegistry = new EscrowRegistry(confirmationEscrow);
+  const notificationService = new NotificationService(pool);
 
   // Register chain-specific escrow adapters (opt-in via env vars)
   // Deferred to caller / startup code to avoid importing heavy deps in tests
@@ -331,7 +334,16 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
   server.post('/registry/handshake', {
     schema: { tags: ['negotiation'], summary: 'Initiate a trade handshake' },
   }, async (request) => {
-    return await repo.create(request.body as any);
+    const trade = await repo.create(request.body as any);
+    notificationService.notify('trade.proposed', trade.id, {
+      buyer_id: trade.buyer_id,
+      seller_id: trade.seller_id,
+      asset_id: trade.asset_id,
+      status: trade.status,
+      trade_value: trade.trade_value,
+      currency: trade.currency,
+    });
+    return trade;
   });
 
   server.get('/registry/handshake/:id', {
@@ -353,7 +365,20 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
     const { id } = request.params as any;
     const { fromVersion, nextState, quote } = request.body as any;
     try {
-      return await repo.transition(id, fromVersion, nextState, quote);
+      const updated = await repo.transition(id, fromVersion, nextState, quote);
+      const event = STATUS_EVENT_MAP[nextState];
+      if (event) {
+        notificationService.notify(event, updated.id, {
+          buyer_id: updated.buyer_id,
+          seller_id: updated.seller_id,
+          asset_id: updated.asset_id,
+          status: updated.status,
+          trade_value: updated.trade_value,
+          currency: updated.currency,
+          fee_amount: updated.fee_amount,
+        });
+      }
+      return updated;
     } catch (err: any) {
       if (err.message === 'StaleVersionError') {
         return reply.status(409).send({ error: 'Conflict: negotiation state has changed.' });
@@ -416,7 +441,16 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       token,
     });
 
-    await repo.transition(handshake_id, trade.version, 'escrowed');
+    const escrowed = await repo.transition(handshake_id, trade.version, 'escrowed');
+    notificationService.notify('escrow.locked', handshake_id, {
+      buyer_id: escrowed.buyer_id,
+      seller_id: escrowed.seller_id,
+      asset_id: escrowed.asset_id,
+      status: escrowed.status,
+      trade_value: escrowed.trade_value,
+      currency: escrowed.currency,
+      escrow_id: result.escrowId,
+    });
     return { escrowId: result.escrowId, txHash: result.txHash, status: 'escrowed' };
   });
 
@@ -445,6 +479,15 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       }
 
       const confirmed = await repo.transition(tradeId, trade.version, 'delivery_confirmed');
+      notificationService.notify('delivery.confirmed', tradeId, {
+        buyer_id: confirmed.buyer_id,
+        seller_id: confirmed.seller_id,
+        asset_id: confirmed.asset_id,
+        status: confirmed.status,
+        trade_value: confirmed.trade_value,
+        currency: confirmed.currency,
+        escrow_id: escrowId,
+      });
 
       const adapter = escrowRegistry.get(chainId) || confirmationEscrow;
       const releaseResult = await adapter.releaseFunds({ escrowId, tradeId });
@@ -453,6 +496,16 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       if (confirmed.trade_value !== null) settleQuote.trade_value = confirmed.trade_value;
       if (confirmed.currency !== null) settleQuote.currency = confirmed.currency;
       const settled = await repo.transition(tradeId, confirmed.version, 'settled', Object.keys(settleQuote).length > 0 ? settleQuote : undefined);
+      notificationService.notify('trade.settled', tradeId, {
+        buyer_id: settled.buyer_id,
+        seller_id: settled.seller_id,
+        asset_id: settled.asset_id,
+        status: settled.status,
+        trade_value: settled.trade_value,
+        currency: settled.currency,
+        fee_amount: settled.fee_amount,
+        escrow_id: escrowId,
+      });
 
       return { status: 'settled', txHash: releaseResult.txHash, trade: settled };
     } finally {
@@ -480,6 +533,15 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       }
 
       const updated = await repo.transition(tradeId, trade.version, 'disputed');
+      notificationService.notify('trade.disputed', tradeId, {
+        buyer_id: updated.buyer_id,
+        seller_id: updated.seller_id,
+        asset_id: updated.asset_id,
+        status: updated.status,
+        trade_value: updated.trade_value,
+        currency: updated.currency,
+        escrow_id: escrowId,
+      });
       return { status: 'disputed', trade: updated };
     } finally {
       client.release();
@@ -528,12 +590,32 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       }
 
       const resolved = await repo.transition(tradeId, trade.version, 'resolved');
+      notificationService.notify('trade.resolved', tradeId, {
+        buyer_id: resolved.buyer_id,
+        seller_id: resolved.seller_id,
+        asset_id: resolved.asset_id,
+        status: resolved.status,
+        trade_value: resolved.trade_value,
+        currency: resolved.currency,
+        escrow_id: escrowId,
+        resolution,
+      });
 
       if (resolution === 'release') {
         const settleQuote: Record<string, any> = {};
         if (resolved.trade_value !== null) settleQuote.trade_value = resolved.trade_value;
         if (resolved.currency !== null) settleQuote.currency = resolved.currency;
         const settled = await repo.transition(tradeId, resolved.version, 'settled', Object.keys(settleQuote).length > 0 ? settleQuote : undefined);
+        notificationService.notify('trade.settled', tradeId, {
+          buyer_id: settled.buyer_id,
+          seller_id: settled.seller_id,
+          asset_id: settled.asset_id,
+          status: settled.status,
+          trade_value: settled.trade_value,
+          currency: settled.currency,
+          fee_amount: settled.fee_amount,
+          escrow_id: escrowId,
+        });
         return { status: 'settled', resolution, txHash, trade: settled };
       }
 
@@ -679,12 +761,92 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
         }
 
         const resolved = await repo.resolveDispute(id, trade.version, releaseToOwner, reason);
+        notificationService.notify('trade.resolved', id, {
+          buyer_id: resolved.buyer_id,
+          seller_id: resolved.seller_id,
+          asset_id: resolved.asset_id,
+          status: resolved.status,
+          trade_value: resolved.trade_value,
+          currency: resolved.currency,
+          escrow_id: escrowId,
+          resolution: releaseToOwner,
+        });
         return { ...resolved, escrow_id: escrowId, escrow_tx_hash: txHash, released_to: releaseToOwner };
       } finally {
         client.release();
       }
     }
   );
+
+  // -------------------------------------------------------------------------
+  // Notifications
+  // -------------------------------------------------------------------------
+
+  server.post('/registry/notifications/subscribe', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['negotiation'],
+      summary: 'Subscribe to trade notifications',
+      body: {
+        type: 'object' as const,
+        properties: {
+          webhook_url: { type: 'string' as const },
+          email: { type: 'string' as const },
+          events: { type: 'array' as const, items: { type: 'string' as const } },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const agentId = request.headers['x-agent-id'] as string;
+    const { webhook_url, email, events } = request.body as { webhook_url?: string; email?: string; events?: string[] };
+    if (!webhook_url && !email) {
+      return reply.status(400).send({ error: 'Either webhook_url or email must be provided' });
+    }
+    try {
+      const sub = await notificationService.subscribe(agentId, { webhook_url, email, events });
+      return sub;
+    } catch (err: any) {
+      return reply.status(400).send({ error: err.message });
+    }
+  });
+
+  server.delete<{ Params: { id: string } }>('/registry/notifications/:id', {
+    schema: { tags: ['negotiation'], summary: 'Unsubscribe from notifications' },
+  }, async (request) => {
+    const agentId = request.headers['x-agent-id'] as string;
+    await notificationService.unsubscribe(agentId, request.params.id);
+    return { ok: true };
+  });
+
+  server.get('/registry/notifications/subscriptions', {
+    schema: { tags: ['negotiation'], summary: 'List active notification subscriptions' },
+  }, async (request) => {
+    const agentId = request.headers['x-agent-id'] as string;
+    const subscriptions = await notificationService.getSubscriptions(agentId);
+    return { subscriptions };
+  });
+
+  server.get('/registry/notifications/log', {
+    schema: { tags: ['negotiation'], summary: 'Get notification log for this agent' },
+  }, async (request) => {
+    const agentId = request.headers['x-agent-id'] as string;
+    const { limit, offset } = request.query as { limit?: number; offset?: number };
+    return await notificationService.getNotificationLog(agentId, {
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  });
+
+  // Admin notifications view
+  server.get('/admin/api/notifications', {
+    schema: { tags: ['admin'], summary: 'List all notification log entries' },
+  }, async (request) => {
+    const { limit, offset } = request.query as { limit?: number; offset?: number };
+    return await notificationService.getAllNotificationLog({
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  });
 
   // -------------------------------------------------------------------------
   // Admin Auth
@@ -738,5 +900,5 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
     return reply.status(status).send({ error: error.message ?? 'Bad request' });
   });
 
-  return { server, escrowRegistry };
+  return { server, escrowRegistry, notificationService };
 }
