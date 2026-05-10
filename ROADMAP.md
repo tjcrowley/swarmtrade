@@ -134,8 +134,8 @@ Once all tests pass:
 | Feature | Estimated Effort | Priority |
 |---------|-----------------|----------|
 | EVM escrow on Base testnet | 8-12 hours | High |
-| NEAR escrow scaffolding | 6-8 hours | Medium |
 | Reputation system (star rating, trade count) | 4-6 hours | Medium |
+| ~~NEAR escrow~~ | — | **Backburnered** (2026-05-10) |
 | User email notifications | 3-4 hours | Low |
 | Advanced analytics dashboard | 4-6 hours | Low |
 

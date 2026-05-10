@@ -107,6 +107,17 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
   }
 
   // -------------------------------------------------------------------------
+  // Public-facing pages (root level)
+  // -------------------------------------------------------------------------
+  server.get('/', { schema: { hide: true } }, async (_req, reply) => {
+    return reply.sendFile('index.html');
+  });
+
+  server.get('/faq', { schema: { hide: true } }, async (_req, reply) => {
+    return reply.sendFile('faq.html');
+  });
+
+  // -------------------------------------------------------------------------
   // JSON Schemas
   // -------------------------------------------------------------------------
   const AgentCardSchema = {
