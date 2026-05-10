@@ -199,6 +199,17 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
                 escrow: { type: 'string' as const },
               },
             },
+            adapters: {
+              type: 'array' as const,
+              items: {
+                type: 'object' as const,
+                properties: {
+                  chainId: { type: 'string' as const },
+                  name: { type: 'string' as const },
+                  escrowAddress: { type: 'string' as const },
+                },
+              },
+            },
           },
         },
       },
