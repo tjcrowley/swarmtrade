@@ -71,7 +71,7 @@ export class NearEscrowAdapter implements EscrowAdapter {
   }
 
   async lockFunds(params: LockFundsParams): Promise<LockFundsResult> {
-    const depositTxHash = (params as any).metadata?.deposit_tx_hash as
+    const depositTxHash = params.metadata?.deposit_tx_hash as
       | string
       | undefined;
     if (!depositTxHash) {

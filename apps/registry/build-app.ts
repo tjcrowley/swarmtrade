@@ -395,6 +395,7 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
     schema: {
       tags: ['negotiation'],
       summary: 'Lock funds in escrow for a trade',
+      description: 'For on-chain adapters (EVM, NEAR), the buyer must first deposit funds to the platform escrow wallet on the target chain, then supply the resulting tx hash as metadata.deposit_tx_hash so the adapter can verify the deposit before locking.',
       body: {
         type: 'object' as const,
         required: ['handshake_id', 'buyer_address', 'seller_address', 'amount', 'token'],
@@ -405,12 +406,27 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
           seller_address: { type: 'string' as const },
           amount: { type: 'string' as const, description: 'Amount in smallest unit as string (for bigint support)' },
           token: { type: 'string' as const, default: 'native' },
+          metadata: {
+            type: 'object' as const,
+            description: 'Chain-specific metadata. For EVM/NEAR include deposit_tx_hash.',
+            properties: {
+              deposit_tx_hash: { type: 'string' as const, description: 'On-chain tx hash of the buyer\'s deposit to the platform wallet' },
+            },
+            additionalProperties: true,
+          },
         },
       },
     },
   }, async (request, reply) => {
-    const { handshake_id, chain_id = 'off-chain', buyer_address, seller_address, amount, token = 'native' } =
-      request.body as { handshake_id: string; chain_id?: string; buyer_address: string; seller_address: string; amount: string; token?: string };
+    const { handshake_id, chain_id = 'off-chain', buyer_address, seller_address, amount, token = 'native', metadata } =
+      request.body as { handshake_id: string; chain_id?: string; buyer_address: string; seller_address: string; amount: string; token?: string; metadata?: Record<string, unknown> };
+
+    if (metadata) {
+      const metaSize = Buffer.byteLength(JSON.stringify(metadata), 'utf8');
+      if (metaSize > 1024) {
+        return reply.status(400).send({ error: 'metadata exceeds 1KB limit' });
+      }
+    }
 
     if (!UUID_RE.test(handshake_id)) return reply.status(400).send({ error: 'Invalid handshake_id format' });
     let amountBig: bigint;
@@ -433,13 +449,22 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       return reply.status(400).send({ error: `No escrow adapter for chain '${chain_id}'. Available: ${escrowRegistry.list().map(a => a.chainId).join(', ')}` });
     }
 
-    const result = await adapter.lockFunds({
-      tradeId: handshake_id,
-      buyer: buyer_address,
-      seller: seller_address,
-      amount: amountBig,
-      token,
-    });
+    let result;
+    try {
+      result = await adapter.lockFunds({
+        tradeId: handshake_id,
+        buyer: buyer_address,
+        seller: seller_address,
+        amount: amountBig,
+        token,
+        metadata,
+      });
+    } catch (err: any) {
+      // Adapter validation errors (bad tx hash, deposit not found, wrong recipient,
+      // wrong amount, etc.) should surface to the caller as 400, not 500.
+      const msg = err?.message ?? 'Escrow lock failed';
+      return reply.status(400).send({ error: msg });
+    }
 
     const escrowed = await repo.transition(handshake_id, trade.version, 'escrowed');
     notificationService.notify('escrow.locked', handshake_id, {

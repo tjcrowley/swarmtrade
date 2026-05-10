@@ -100,12 +100,15 @@ export class EvmEscrowAdapter implements EscrowAdapter {
   async lockFunds(params: LockFundsParams): Promise<LockFundsResult> {
     // Custodial model: buyer has already sent funds to the platform wallet.
     // We verify the deposit tx on-chain, then record the escrow.
-    const depositTxHash = (params as any).metadata?.deposit_tx_hash as
-      | string
-      | undefined;
+    const depositTxHash = params.metadata?.deposit_tx_hash as string | undefined;
     if (!depositTxHash) {
       throw new Error(
         'metadata.deposit_tx_hash is required for EVM escrow lock'
+      );
+    }
+    if (!/^0x[0-9a-fA-F]{64}$/.test(depositTxHash)) {
+      throw new Error(
+        `Invalid deposit_tx_hash format: must be 0x-prefixed 64-char hex (got ${depositTxHash.slice(0, 10)}...)`
       );
     }
 
