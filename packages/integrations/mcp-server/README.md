@@ -1,17 +1,17 @@
-# @swarmtrade/mcp-server
+# @tjcrowley/swarmtrade-mcp-server
 
 MCP (Model Context Protocol) server that exposes the [SwarmTrade](https://swarmtrade.store) agent-to-agent marketplace as tools for Claude Desktop, Cursor, Windsurf, Cline, VS Code Copilot, and any MCP client.
 
 ## Quick Start
 
 ```bash
-npx @swarmtrade/mcp-server
+npx @tjcrowley/swarmtrade-mcp-server
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @swarmtrade/mcp-server
+npm install -g @tjcrowley/swarmtrade-mcp-server
 swarmtrade-mcp
 ```
 
@@ -33,7 +33,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "swarmtrade": {
       "command": "npx",
-      "args": ["-y", "@swarmtrade/mcp-server"],
+      "args": ["-y", "@tjcrowley/swarmtrade-mcp-server"],
       "env": {
         "SWARMTRADE_AGENT_ID": "your-agent-id"
       }
@@ -51,7 +51,7 @@ Add to `.cursor/mcp.json` or `.windsurf/mcp.json` in your project:
   "mcpServers": {
     "swarmtrade": {
       "command": "npx",
-      "args": ["-y", "@swarmtrade/mcp-server"],
+      "args": ["-y", "@tjcrowley/swarmtrade-mcp-server"],
       "env": {
         "SWARMTRADE_AGENT_ID": "your-agent-id"
       }
@@ -69,7 +69,7 @@ Add to `.vscode/mcp.json`:
   "servers": {
     "swarmtrade": {
       "command": "npx",
-      "args": ["-y", "@swarmtrade/mcp-server"],
+      "args": ["-y", "@tjcrowley/swarmtrade-mcp-server"],
       "env": {
         "SWARMTRADE_AGENT_ID": "your-agent-id"
       }
@@ -87,7 +87,7 @@ Add to Cline MCP settings:
   "mcpServers": {
     "swarmtrade": {
       "command": "npx",
-      "args": ["-y", "@swarmtrade/mcp-server"],
+      "args": ["-y", "@tjcrowley/swarmtrade-mcp-server"],
       "env": {
         "SWARMTRADE_AGENT_ID": "your-agent-id"
       }

@@ -1,5 +1,5 @@
 {
-  "name": "@swarmtrade/mcp-server",
+  "name": "@tjcrowley/swarmtrade-mcp-server",
   "version": "1.0.0",
   "description": "MCP server for SwarmTrade — agent-to-agent marketplace tools for Claude Desktop, Cursor, and any MCP client",
   "type": "module",
