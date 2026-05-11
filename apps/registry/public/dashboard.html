@@ -41,6 +41,54 @@
     </div>
   </div>
 
+  <!-- Analytics -->
+  <div>
+    <h2 class="text-lg font-semibold mb-4 text-slate-200">Analytics</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- Summary -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+        <h3 class="text-sm font-semibold uppercase text-slate-400 mb-4">Platform Summary</h3>
+        <div id="analyticsSummary" class="space-y-2 text-sm text-slate-300">Loading…</div>
+      </div>
+
+      <!-- Volume -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold uppercase text-slate-400">Trade Volume</h3>
+          <select id="volumePeriod" onchange="loadVolume()"
+            class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200">
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+            <option value="month">Monthly</option>
+          </select>
+        </div>
+        <div id="volumeChart" class="space-y-1 text-sm text-slate-300 max-h-48 overflow-y-auto">Loading…</div>
+      </div>
+
+      <!-- Top Agents -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold uppercase text-slate-400">Top Agents</h3>
+          <select id="agentMetric" onchange="loadTopAgents()"
+            class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200">
+            <option value="volume">By Volume</option>
+            <option value="trades">By Trades</option>
+            <option value="rating">By Rating</option>
+          </select>
+        </div>
+        <div id="topAgents" class="space-y-1 text-sm text-slate-300 max-h-48 overflow-y-auto">Loading…</div>
+      </div>
+
+      <!-- Top Assets -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+        <h3 class="text-sm font-semibold uppercase text-slate-400 mb-4">Top Assets</h3>
+        <div id="topAssets" class="space-y-1 text-sm text-slate-300 max-h-48 overflow-y-auto">Loading…</div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Fee Config -->
   <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
     <h2 class="text-lg font-semibold mb-1 text-slate-200">Fee Configuration</h2>
@@ -403,8 +451,75 @@
     pager.textContent = total > 25 ? `Showing 25 of ${total} escrow records` : `${total} escrow record${total !== 1 ? 's' : ''}`;
   }
 
+  async function loadAnalyticsSummary() {
+    const res = await authFetch(`${API}/admin/api/analytics/summary`);
+    if (!res.ok) { document.getElementById('analyticsSummary').textContent = 'Failed to load'; return; }
+    const d = await res.json();
+    const pct = d.period_comparison.change_pct;
+    const arrow = pct > 0 ? '↑' : pct < 0 ? '↓' : '→';
+    const color = pct > 0 ? 'text-green-400' : pct < 0 ? 'text-red-400' : 'text-slate-400';
+    document.getElementById('analyticsSummary').innerHTML = `
+      <div class="flex justify-between"><span class="text-slate-400">Total Trades</span><span>${d.total_trades.toLocaleString()}</span></div>
+      <div class="flex justify-between"><span class="text-slate-400">Settled</span><span>${d.settled_trades.toLocaleString()}</span></div>
+      <div class="flex justify-between"><span class="text-slate-400">Active</span><span>${d.active_negotiations.toLocaleString()}</span></div>
+      <div class="flex justify-between"><span class="text-slate-400">Total Volume</span><span>${fmt(d.total_volume)}</span></div>
+      <div class="flex justify-between"><span class="text-slate-400">Total Fees</span><span class="text-green-400">${fmt(d.total_fees)}</span></div>
+      <div class="flex justify-between"><span class="text-slate-400">Avg Trade</span><span>${fmt(d.avg_trade_value)}</span></div>
+      <div class="flex justify-between"><span class="text-slate-400">Unique Agents</span><span>${d.unique_agents}</span></div>
+      <div class="flex justify-between border-t border-slate-700 pt-2 mt-2">
+        <span class="text-slate-400">Week-over-Week</span>
+        <span class="${color} font-semibold">${arrow} ${Math.abs(pct)}%</span>
+      </div>`;
+  }
+
+  async function loadVolume() {
+    const period = document.getElementById('volumePeriod').value;
+    const res = await authFetch(`${API}/admin/api/analytics/volume?period=${period}&days=90`);
+    if (!res.ok) { document.getElementById('volumeChart').textContent = 'Failed to load'; return; }
+    const rows = await res.json();
+    if (!rows.length) { document.getElementById('volumeChart').textContent = 'No data yet'; return; }
+    const maxVol = Math.max(...rows.map(r => r.volume), 1);
+    document.getElementById('volumeChart').innerHTML = rows.map(r => {
+      const pct = Math.max(2, (r.volume / maxVol) * 100);
+      return `<div class="flex items-center gap-2">
+        <span class="text-xs text-slate-500 w-20 shrink-0">${r.date}</span>
+        <div class="flex-1 bg-slate-700 rounded h-4 overflow-hidden">
+          <div class="bg-blue-500 h-full rounded" style="width:${pct}%"></div>
+        </div>
+        <span class="text-xs text-slate-400 w-20 text-right">${fmt(r.volume)} (${r.trade_count})</span>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadTopAgents() {
+    const by = document.getElementById('agentMetric').value;
+    const res = await authFetch(`${API}/admin/api/analytics/top-agents?metric=${by}&limit=10`);
+    if (!res.ok) { document.getElementById('topAgents').textContent = 'Failed to load'; return; }
+    const rows = await res.json();
+    if (!rows.length) { document.getElementById('topAgents').textContent = 'No agents yet'; return; }
+    document.getElementById('topAgents').innerHTML = rows.map(r => `
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-500 w-6">#${r.rank}</span>
+        <span class="font-mono text-xs flex-1 truncate">${r.agent_id}</span>
+        <span class="text-xs text-slate-300">${by === 'volume' ? fmt(r.metric_value) : r.metric_value.toLocaleString()}</span>
+      </div>`).join('');
+  }
+
+  async function loadTopAssets() {
+    const res = await authFetch(`${API}/admin/api/analytics/top-assets?limit=10`);
+    if (!res.ok) { document.getElementById('topAssets').textContent = 'Failed to load'; return; }
+    const rows = await res.json();
+    if (!rows.length) { document.getElementById('topAssets').textContent = 'No asset data yet'; return; }
+    document.getElementById('topAssets').innerHTML = rows.map(r => `
+      <div class="flex items-center justify-between">
+        <span class="text-sm">${r.asset_type}</span>
+        <span class="text-xs text-slate-400">${r.trade_count} trades · ${fmt(r.total_volume)}</span>
+      </div>`).join('');
+  }
+
   async function loadAll() {
-    await Promise.all([loadStats(), loadFeeConfig(), loadDisputes(), loadTrades(), loadEscrows()]);
+    await Promise.all([loadStats(), loadFeeConfig(), loadDisputes(), loadTrades(), loadEscrows(),
+      loadAnalyticsSummary(), loadVolume(), loadTopAgents(), loadTopAssets()]);
   }
 
   // Auto-load on page open (cookie auth handles it)

@@ -260,10 +260,10 @@ export class AnalyticsRepo {
 export function registerAnalyticsRoutes(server: FastifyInstance, pool: Pool): void {
   const analytics = new AnalyticsRepo(pool);
 
-  // GET /analytics/volume
-  server.get('/analytics/volume', {
+  // GET /admin/api/analytics/volume
+  server.get('/admin/api/analytics/volume', {
     schema: {
-      tags: ['analytics'],
+      tags: ['admin-analytics'],
       summary: 'Trade volume time series',
       querystring: {
         type: 'object' as const,
@@ -285,10 +285,10 @@ export function registerAnalyticsRoutes(server: FastifyInstance, pool: Pool): vo
     return analytics.getVolume(period, days);
   });
 
-  // GET /analytics/top-agents
-  server.get('/analytics/top-agents', {
+  // GET /admin/api/analytics/top-agents
+  server.get('/admin/api/analytics/top-agents', {
     schema: {
-      tags: ['analytics'],
+      tags: ['admin-analytics'],
       summary: 'Agent leaderboard',
       querystring: {
         type: 'object' as const,
@@ -310,10 +310,10 @@ export function registerAnalyticsRoutes(server: FastifyInstance, pool: Pool): vo
     return analytics.getTopAgents(metric, limit);
   });
 
-  // GET /analytics/top-assets
-  server.get('/analytics/top-assets', {
+  // GET /admin/api/analytics/top-assets
+  server.get('/admin/api/analytics/top-assets', {
     schema: {
-      tags: ['analytics'],
+      tags: ['admin-analytics'],
       summary: 'Most traded asset types',
       querystring: {
         type: 'object' as const,
@@ -328,10 +328,10 @@ export function registerAnalyticsRoutes(server: FastifyInstance, pool: Pool): vo
     return analytics.getTopAssets(limit);
   });
 
-  // GET /analytics/summary
-  server.get('/analytics/summary', {
+  // GET /admin/api/analytics/summary
+  server.get('/admin/api/analytics/summary', {
     schema: {
-      tags: ['analytics'],
+      tags: ['admin-analytics'],
       summary: 'Enhanced platform summary with week-over-week comparison',
     },
   }, async () => {

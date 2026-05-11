@@ -725,7 +725,7 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
   });
 
   // -------------------------------------------------------------------------
-  // Public Analytics API
+  // Admin Analytics API (behind admin auth hook)
   // -------------------------------------------------------------------------
   registerAnalyticsRoutes(server, pool);
 
