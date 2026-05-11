@@ -199,13 +199,14 @@ server.tool(
     buyer_address: z.string().describe('Buyer wallet or payment address'),
     seller_address: z.string().describe('Seller wallet or payment address'),
     amount: z.string().describe('Amount to lock in escrow (as string for precision)'),
-    chain_id: z.number().optional().describe('Blockchain chain ID for on-chain escrow (1=Ethereum, 8453=Base, 137=Polygon, 0=off-chain)'),
-    token: z.string().optional().describe('Token symbol or contract address for ERC-20 escrow (e.g. "USDC")'),
+    chain_id: z.number().optional().describe('Numeric chain ID for on-chain escrow (1=Ethereum, 8453=Base, 137=Polygon, 11155111=Sepolia). Omit for off-chain escrow.'),
+    token: z.string().optional().describe('Token contract address for ERC-20 escrow (omit for native token)'),
   },
   async ({ handshake_id, buyer_address, seller_address, amount, chain_id, token }) => {
     try {
       const body: Record<string, unknown> = { handshake_id, buyer_address, seller_address, amount };
-      if (chain_id !== undefined) body.chain_id = chain_id;
+      // API expects CAIP-2 format "eip155:<chainId>" or the string "off-chain"
+      if (chain_id !== undefined) body.chain_id = `eip155:${chain_id}`;
       if (token) body.token = token;
       const data = await apiRequest('POST', '/registry/escrow/lock', body);
       const escrow = data as Record<string, unknown>;
