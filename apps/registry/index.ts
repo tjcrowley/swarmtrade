@@ -64,6 +64,32 @@ async function migrate() {
       VALUES ('fee_config', '{"fee_bps": 150, "min_fee": null, "max_fee": null}')
       ON CONFLICT (key) DO NOTHING;
 
+      CREATE TABLE IF NOT EXISTS agent_reputation (
+          agent_id TEXT PRIMARY KEY,
+          total_trades INTEGER DEFAULT 0,
+          successful_trades INTEGER DEFAULT 0,
+          disputed_trades INTEGER DEFAULT 0,
+          disputes_lost INTEGER DEFAULT 0,
+          avg_rating NUMERIC(3,2),
+          trust_score INTEGER DEFAULT 50,
+          last_trade_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS trade_ratings (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          trade_id UUID NOT NULL REFERENCES handshakes(handshake_id),
+          rater_id TEXT NOT NULL,
+          ratee_id TEXT NOT NULL,
+          rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+          comment TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT unique_rating_per_trade UNIQUE (trade_id, rater_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_ratings_ratee ON trade_ratings (ratee_id);
+      CREATE INDEX IF NOT EXISTS idx_reputation_score ON agent_reputation (trust_score DESC);
+
       CREATE TABLE IF NOT EXISTS notification_subscriptions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         agent_id TEXT NOT NULL,
