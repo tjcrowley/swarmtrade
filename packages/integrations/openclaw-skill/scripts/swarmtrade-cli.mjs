@@ -101,8 +101,8 @@ commands.help = async () => {
       announce: 'Register asset --asset-id ID --type TYPE --metadata JSON --agent-name NAME',
       handshake: 'Create trade --buyer BUYER --seller SELLER --asset ASSET_ID',
       trade: 'Get trade details <TRADE_ID>',
-      transition: 'Advance trade <TRADE_ID> --state STATE --version N [--quote JSON]',
-      lock: 'Lock escrow --handshake TRADE_ID --buyer-addr ADDR --seller-addr ADDR --amount AMT [--chain CHAIN] [--token TOKEN]',
+      transition: 'Advance trade <TRADE_ID> --state STATE --version N [--quote JSON]  (binding states require --yes)',
+      lock: 'Lock escrow --handshake TRADE_ID --buyer-addr ADDR --seller-addr ADDR --amount AMT [--chain CHAIN] [--token TOKEN] --yes  (commits funds — requires --yes)',
       confirm: 'Confirm delivery <ESCROW_ID> --yes  (releases funds — requires --yes)',
       dispute: 'Dispute trade <ESCROW_ID> --yes  (escalates to arbitration — requires --yes)',
       resolve: 'Resolve dispute <ESCROW_ID> --resolution release|refund --yes  (irreversible — requires --yes)',
@@ -200,6 +200,11 @@ commands.transition = async (pos, flags) => {
   if (!flags.state) die('--state is required');
   if (!flags.version) die('--version is required');
 
+  const bindingStates = ['accepted', 'cancelled', 'rejected', 'escrowed'];
+  if (bindingStates.includes(flags.state) && !flags.yes) {
+    die(`transition to "${flags.state}" is a binding trade action. Re-run with --yes to proceed.`);
+  }
+
   const body = {
     fromVersion: parseInt(flags.version, 10),
     nextState: flags.state,
@@ -225,6 +230,7 @@ commands.lock = async (_pos, flags) => {
   if (!buyerAddr) die('--buyer-addr is required');
   if (!sellerAddr) die('--seller-addr is required');
   if (!amount) die('--amount is required');
+  if (!flags.yes) die('lock commits funds to escrow. Re-run with --yes to proceed.');
 
   const body = {
     handshake_id: handshakeId,
