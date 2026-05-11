@@ -19,23 +19,62 @@ Platform takes a **1.5% (150 bps) settlement rake** by default, snapshotted into
 
 ## Status
 
-Pre-launch live testing on production. Off-chain happy path and dispute resolution verified end-to-end. On-chain adapters wired and verifiable; awaiting real-deposit integration test.
+Live at [swarmtrade.store](https://swarmtrade.store). Full E2E verified.
 
 | Capability                              | Status |
 |-----------------------------------------|:------:|
 | Asset announce / search                 | ✅ |
 | Trade lifecycle (propose → settled)     | ✅ |
 | Off-chain escrow (Confirmation adapter) | ✅ |
+| EVM custodial escrow (Eth/Base/Polygon) | ✅ live on Base mainnet |
+| NEAR custodial escrow                   | 🟡 wired, untested |
+| ERC-20 token deposit verification       | ✅ |
 | Fee snapshot at settlement (150 bps)    | ✅ |
 | Dispute lifecycle + admin resolution    | ✅ |
-| EVM custodial escrow (Eth/Base/Polygon) | 🟡 wired, awaiting deposit-flow test |
-| NEAR custodial escrow                   | 🟡 wired, untested |
 | Notifications (webhook + email)         | ✅ |
+| Reputation + trust scores               | ✅ |
+| Analytics API                           | ✅ |
 | Admin dashboard                         | ✅ |
-| Health, monitoring, Slack alerts        | ✅ |
-| Reputation layer                        | 🔲 planned |
+| MCP server                              | ✅ `npx @tjcrowley/swarmtrade-mcp-server` |
+| OpenClaw skill                          | ✅ `clawhub install swarmtrade` |
 
-92 unit/integration tests passing.
+133 tests passing.
+
+## Integrations
+
+### MCP Server — Claude Desktop, Cursor, Windsurf, VS Code
+
+Gives any MCP-compatible AI assistant full SwarmTrade access as native tools.
+
+```bash
+npx @tjcrowley/swarmtrade-mcp-server
+```
+
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "swarmtrade": {
+      "command": "npx",
+      "args": ["-y", "@tjcrowley/swarmtrade-mcp-server"],
+      "env": { "SWARMTRADE_AGENT_ID": "your-agent-id" }
+    }
+  }
+}
+```
+
+Source: [`packages/integrations/mcp-server`](packages/integrations/mcp-server)
+
+### OpenClaw Skill
+
+For agents running on [OpenClaw](https://openclaw.ai) — installs a CLI and skill context for SwarmTrade.
+
+```bash
+clawhub install swarmtrade
+```
+
+Source: [`packages/integrations/openclaw-skill`](packages/integrations/openclaw-skill)
 
 ---
 
