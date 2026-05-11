@@ -37,6 +37,7 @@ import { FeeConfigRepository } from './fee-config';
 import { EscrowRegistry, ConfirmationEscrowAdapter } from './escrow';
 import { recordResponse } from './alert';
 import { NotificationService, STATUS_EVENT_MAP } from './notifications';
+import { ReputationService } from './reputation';
 
 export interface AppDeps {
   pool: Pool;
@@ -50,6 +51,7 @@ export interface AppResult {
   server: FastifyInstance;
   escrowRegistry: EscrowRegistry;
   notificationService: NotificationService;
+  reputationService: ReputationService;
 }
 
 export async function buildApp(deps: AppDeps): Promise<AppResult> {
@@ -66,6 +68,7 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
   const confirmationEscrow = new ConfirmationEscrowAdapter(pool);
   const escrowRegistry = new EscrowRegistry(confirmationEscrow);
   const notificationService = new NotificationService(pool);
+  const reputationService = new ReputationService(pool);
 
   // Register chain-specific escrow adapters (opt-in via env vars)
   // Deferred to caller / startup code to avoid importing heavy deps in tests
@@ -111,6 +114,7 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       tags: [
         { name: 'registry', description: 'Asset announcement & discovery' },
         { name: 'negotiation', description: 'Handshake & settlement protocol' },
+        { name: 'reputation', description: 'Agent trust scores & trade ratings' },
         { name: 'admin', description: 'Platform administration' },
         { name: 'health', description: 'Service health' },
       ],
@@ -557,6 +561,11 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
         escrow_id: escrowId,
       });
 
+      // Update reputation for both parties
+      reputationService.recordSettlement(settled.buyer_id, settled.seller_id).catch(err => {
+        server.log.error({ err }, 'Failed to record reputation settlement');
+      });
+
       return { status: 'settled', txHash: releaseResult.txHash, trade: settled };
     } finally {
       client.release();
@@ -592,6 +601,12 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
         currency: updated.currency,
         escrow_id: escrowId,
       });
+
+      // Track dispute in reputation
+      reputationService.recordDispute(updated.buyer_id, updated.seller_id).catch(err => {
+        server.log.error({ err }, 'Failed to record reputation dispute');
+      });
+
       return { status: 'disputed', trade: updated };
     } finally {
       client.release();
@@ -832,6 +847,13 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
           escrow_id: escrowId,
           resolution: releaseToOwner,
         });
+
+        // The loser of the dispute gets a disputes_lost mark
+        const loserId = releaseToOwner === 'seller' ? resolved.buyer_id : resolved.seller_id;
+        reputationService.recordDisputeResolution(loserId).catch(err => {
+          server.log.error({ err }, 'Failed to record dispute resolution in reputation');
+        });
+
         return { ...resolved, escrow_id: escrowId, escrow_tx_hash: txHash, released_to: releaseToOwner };
       } finally {
         client.release();
@@ -898,6 +920,106 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Reputation
+  // -------------------------------------------------------------------------
+
+  server.get<{ Params: { agentId: string } }>('/registry/reputation/:agentId', {
+    schema: {
+      tags: ['reputation'],
+      summary: 'Get agent reputation and trust score',
+      params: {
+        type: 'object' as const,
+        properties: { agentId: { type: 'string' as const } },
+        required: ['agentId'],
+      },
+      response: {
+        200: {
+          type: 'object' as const,
+          properties: {
+            agent_id: { type: 'string' as const },
+            total_trades: { type: 'integer' as const },
+            successful_trades: { type: 'integer' as const },
+            disputed_trades: { type: 'integer' as const },
+            disputes_lost: { type: 'integer' as const },
+            avg_rating: { type: 'number' as const, nullable: true },
+            trust_score: { type: 'integer' as const, minimum: 0, maximum: 100 },
+            last_trade_at: { type: 'string' as const, nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request) => {
+    const { agentId } = request.params;
+    return await reputationService.getReputation(agentId);
+  });
+
+  server.get<{ Params: { agentId: string } }>('/registry/reputation/:agentId/ratings', {
+    schema: {
+      tags: ['reputation'],
+      summary: 'Get ratings received by an agent',
+      params: {
+        type: 'object' as const,
+        properties: { agentId: { type: 'string' as const } },
+        required: ['agentId'],
+      },
+    },
+  }, async (request) => {
+    const { agentId } = request.params;
+    const { limit } = request.query as { limit?: number };
+    return await reputationService.getRatings(agentId, limit ? Number(limit) : 20);
+  });
+
+  server.post('/registry/reputation/rate', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['reputation'],
+      summary: 'Rate a trade counterparty',
+      description: 'Submit a 1-5 star rating for the other party in a settled trade. Each agent can only rate once per trade.',
+      body: {
+        type: 'object' as const,
+        required: ['trade_id', 'ratee_id', 'rating'],
+        properties: {
+          trade_id: { type: 'string' as const },
+          ratee_id: { type: 'string' as const },
+          rating: { type: 'integer' as const, minimum: 1, maximum: 5 },
+          comment: { type: 'string' as const, maxLength: 500 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const agentId = request.headers['x-agent-id'] as string;
+    const { trade_id, ratee_id, rating, comment } = request.body as {
+      trade_id: string; ratee_id: string; rating: number; comment?: string;
+    };
+
+    // Verify the trade exists and is settled, and the rater was a participant
+    const trade = await repo.findById(trade_id);
+    if (!trade) return reply.status(404).send({ error: 'Trade not found' });
+    if (trade.status !== 'settled' && trade.status !== 'resolved') {
+      return reply.status(400).send({ error: 'Can only rate settled or resolved trades' });
+    }
+    if (trade.buyer_id !== agentId && trade.seller_id !== agentId) {
+      return reply.status(403).send({ error: 'Only trade participants can rate' });
+    }
+    if (ratee_id !== trade.buyer_id && ratee_id !== trade.seller_id) {
+      return reply.status(400).send({ error: 'ratee_id must be the other trade participant' });
+    }
+
+    try {
+      const result = await reputationService.submitRating({
+        tradeId: trade_id,
+        raterId: agentId,
+        rateeId: ratee_id,
+        rating,
+        comment,
+      });
+      return result;
+    } catch (err: any) {
+      return reply.status(400).send({ error: err.message });
+    }
+  });
+
   // Admin notifications view
   server.get('/admin/api/notifications', {
     schema: { tags: ['admin'], summary: 'List all notification log entries' },
@@ -961,5 +1083,5 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
     return reply.status(status).send({ error: error.message ?? 'Bad request' });
   });
 
-  return { server, escrowRegistry, notificationService };
+  return { server, escrowRegistry, notificationService, reputationService };
 }

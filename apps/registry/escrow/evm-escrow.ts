@@ -4,6 +4,8 @@ import {
   createWalletClient,
   http,
   parseAbi,
+  parseAbiItem,
+  decodeEventLog,
   type Chain,
   type PublicClient,
   type WalletClient,
@@ -25,6 +27,10 @@ import {
 const ERC20_TRANSFER_ABI = parseAbi([
   'function transfer(address to, uint256 amount) returns (bool)',
 ]);
+
+const ERC20_TRANSFER_EVENT = parseAbiItem(
+  'event Transfer(address indexed from, address indexed to, uint256 value)'
+);
 
 const CHAIN_MAP: Record<number, Chain> = {
   1: mainnet,
@@ -146,26 +152,49 @@ export class EvmEscrowAdapter implements EscrowAdapter {
       throw new Error('Failed to fetch deposit transaction details from chain');
     }
 
-    // Check recipient is the platform escrow address
-    if (
-      tx.to?.toLowerCase() !== this.escrowAddress.toLowerCase()
-    ) {
-      throw new Error(
-        `Deposit tx recipient (${tx.to}) does not match escrow address (${this.escrowAddress})`
-      );
-    }
-
-    // Check amount matches (for native token transfers)
+    // Verify deposit based on token type
     if (params.token === 'native') {
+      // Native ETH transfer: tx.to must be escrow, tx.value must cover amount
+      if (tx.to?.toLowerCase() !== this.escrowAddress.toLowerCase()) {
+        throw new Error(
+          `Deposit tx recipient (${tx.to}) does not match escrow address (${this.escrowAddress})`
+        );
+      }
       if (tx.value < params.amount) {
         throw new Error(
           `Deposit amount (${tx.value}) is less than required (${params.amount})`
         );
       }
+    } else {
+      // ERC-20 transfer: tx.to is the token contract, we decode Transfer event logs
+      const tokenAddress = params.token.toLowerCase() as Address;
+
+      // tx.to should be the token contract
+      if (tx.to?.toLowerCase() !== tokenAddress) {
+        throw new Error(
+          `Deposit tx target (${tx.to}) does not match token contract (${params.token})`
+        );
+      }
+
+      // Decode Transfer events from receipt logs to verify funds reached escrow
+      const transferToEscrow = this.findErc20Transfer(
+        receipt.logs,
+        tokenAddress,
+        this.escrowAddress
+      );
+
+      if (!transferToEscrow) {
+        throw new Error(
+          `No ERC-20 Transfer event found sending to escrow address (${this.escrowAddress}) in tx ${depositTxHash}`
+        );
+      }
+
+      if (transferToEscrow.value < params.amount) {
+        throw new Error(
+          `ERC-20 transfer amount (${transferToEscrow.value}) is less than required (${params.amount})`
+        );
+      }
     }
-    // For ERC-20, the tx.to would be the token contract, not the escrow address.
-    // A full implementation would decode the transfer event logs.
-    // For now we trust the tx if it went to our address or was an ERC-20 call.
 
     // Record in database
     const client = await this.pool.connect();
@@ -337,6 +366,47 @@ export class EvmEscrowAdapter implements EscrowAdapter {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Decode ERC-20 Transfer events from tx receipt logs.
+   * Returns the first Transfer where `to` matches the target address
+   * and the emitting contract matches the expected token.
+   */
+  private findErc20Transfer(
+    logs: TransactionReceipt['logs'],
+    tokenAddress: string,
+    toAddress: Address
+  ): { from: Address; to: Address; value: bigint } | null {
+    const normalizedToken = tokenAddress.toLowerCase();
+    const normalizedTo = toAddress.toLowerCase();
+
+    for (const log of logs) {
+      // Only consider logs emitted by the expected token contract
+      if (log.address.toLowerCase() !== normalizedToken) continue;
+      // Receipt logs always have topics
+      if (!('topics' in log) || !(log as any).topics?.length) continue;
+
+      try {
+        const decoded = decodeEventLog({
+          abi: [ERC20_TRANSFER_EVENT],
+          data: log.data,
+          topics: (log as any).topics,
+        });
+
+        if (decoded.eventName !== 'Transfer') continue;
+        const args = decoded.args as unknown as { from: Address; to: Address; value: bigint };
+
+        if (args.to.toLowerCase() === normalizedTo) {
+          return args;
+        }
+      } catch {
+        // Not a Transfer event or decode failed — skip
+        continue;
+      }
+    }
+
+    return null;
   }
 
   private async getEscrowRecord(escrowId: string): Promise<{
