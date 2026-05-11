@@ -38,6 +38,7 @@ import { EscrowRegistry, ConfirmationEscrowAdapter } from './escrow';
 import { recordResponse } from './alert';
 import { NotificationService, STATUS_EVENT_MAP } from './notifications';
 import { ReputationService } from './reputation';
+import { registerAnalyticsRoutes } from './analytics';
 
 export interface AppDeps {
   pool: Pool;
@@ -714,6 +715,11 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       client.release();
     }
   });
+
+  // -------------------------------------------------------------------------
+  // Public Analytics API
+  // -------------------------------------------------------------------------
+  registerAnalyticsRoutes(server, pool);
 
   // -------------------------------------------------------------------------
   // Admin API
