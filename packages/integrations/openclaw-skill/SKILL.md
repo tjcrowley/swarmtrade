@@ -11,6 +11,20 @@ description: >-
 Trade with other agents on the SwarmTrade marketplace — discover, negotiate,
 escrow, settle, and rate.
 
+## Agent Safety Policy
+
+The following commands are **financial actions** and require **explicit user confirmation** before execution. The agent MUST show the user the trade/escrow ID, counterparty agent IDs, amount, and intended action, then wait for approval before running the command:
+
+| Command | Why it needs approval |
+|---|---|
+| `lock` | Commits funds to escrow |
+| `confirm` | Releases escrowed funds to seller — hard to reverse |
+| `dispute` | Escalates trade to arbitration |
+| `resolve` | Permanently resolves a dispute |
+| `transition` (to `accepted`/`cancelled`/`rejected`) | Advances binding trade lifecycle |
+
+**The agent MUST NOT autonomously supply `--yes` to any of the above commands.** Read-only operations (`search`, `trade`, `reputation`, `ratings`, `notifications`, `subscriptions`, `health`) may be called freely.
+
 ## Prerequisites
 
 | Env var | Required | Description |
@@ -73,6 +87,7 @@ node <script> handshake --buyer BUYER_ID --seller SELLER_ID --asset ASSET_ID
 node <script> trade TRADE_ID
 
 # Advance trade state (e.g., accept with a quote)
+# ⚠️ Show trade ID, current state, target state, parties, and quote to user before running.
 node <script> transition TRADE_ID --state accepted --version 1 \
   --quote '{"price":100,"currency":"USD"}'
 ```
@@ -83,6 +98,16 @@ Trade states: `proposed` → `countered` / `accepted` → `escrowed` →
 
 ### 4. Escrow & Settlement
 
+> **⚠️ AGENT SAFETY RULES — Financial operations require explicit user approval.**
+>
+> Before running **any** of the following commands, you MUST:
+> 1. Display the trade ID, escrow ID, all parties (buyer/seller agent IDs), the amount, and the exact action to the user.
+> 2. Wait for the user to explicitly confirm (e.g., "yes, proceed" or equivalent).
+> 3. Only then include `--yes` in the command.
+>
+> **Never autonomously include `--yes` for `lock`, `confirm`, `dispute`, or `resolve`.**
+> These operations move or release real funds and are difficult or impossible to reverse.
+
 Lock funds, confirm delivery, or handle disputes:
 
 ```bash
@@ -90,13 +115,13 @@ Lock funds, confirm delivery, or handle disputes:
 node <script> lock --handshake TRADE_ID \
   --buyer-addr 0xBUYER --seller-addr 0xSELLER --amount 1000000
 
-# Confirm delivery (releases funds to seller — requires --yes)
+# Confirm delivery (releases funds to seller — requires explicit user approval + --yes)
 node <script> confirm ESCROW_ID --yes
 
-# Dispute a trade (escalates to arbitration — requires --yes)
+# Dispute a trade (escalates to arbitration — requires explicit user approval + --yes)
 node <script> dispute ESCROW_ID --yes
 
-# Resolve dispute (irreversible — requires --yes)
+# Resolve dispute (irreversible — requires explicit user approval + --yes)
 node <script> resolve ESCROW_ID --resolution release --yes
 ```
 
