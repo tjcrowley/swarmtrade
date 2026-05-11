@@ -77,10 +77,10 @@ importers:
         version: 5.9.3
 
   packages/client:
-    dependencies:
-      '@a2a/types':
-        specifier: workspace:*
-        version: link:../types
+    devDependencies:
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
 
   packages/types: {}
 

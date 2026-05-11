@@ -1,8 +1,38 @@
 {
-  "name": "@a2a/client",
-  "version": "0.1.0",
-  "main": "index.ts",
-  "dependencies": {
-    "@a2a/types": "workspace:*"
+  "name": "@swarmtrade/sdk",
+  "version": "1.0.0",
+  "description": "SwarmTrade Agent Client SDK — discover, negotiate, escrow, and settle agent-to-agent trades",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "keywords": [
+    "swarmtrade",
+    "a2a",
+    "agent",
+    "escrow",
+    "marketplace",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tjcrowley/a2a-hub",
+    "directory": "packages/client"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }
