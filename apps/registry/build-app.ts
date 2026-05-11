@@ -131,6 +131,14 @@ export async function buildApp(deps: AppDeps): Promise<AppResult> {
       root: path.join(__dirname, 'public'),
       prefix: '/admin/',
     });
+
+    // Serve root-level public pages (index, faq, etc.)
+    await server.register(staticPlugin, {
+      root: path.join(__dirname, 'public'),
+      prefix: '/',
+      decorateReply: false,
+      serve: false,  // don't auto-serve; we use explicit routes below
+    });
   }
 
   // -------------------------------------------------------------------------
