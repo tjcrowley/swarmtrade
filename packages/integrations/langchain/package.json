@@ -1,0 +1,45 @@
+{
+  "name": "@swarmtrade/langchain",
+  "version": "1.0.0",
+  "description": "LangChain tools for SwarmTrade — use agent-to-agent marketplace capabilities in any LangChain agent",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "keywords": [
+    "swarmtrade",
+    "langchain",
+    "a2a",
+    "agent",
+    "marketplace",
+    "tools",
+    "escrow",
+    "negotiation"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tjcrowley/a2a-hub",
+    "directory": "packages/integrations/langchain"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.0",
+    "@swarmtrade/sdk": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
